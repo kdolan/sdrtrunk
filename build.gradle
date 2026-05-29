@@ -777,3 +777,39 @@ tasks.register('runPipelineReplay', JavaExec) {
     }
     args = argsList
 }
+
+/**
+ * Rdio-units replay validator: feeds P25 Phase 1 baseband WAV through the full ProcessingChain and reports the source
+ * (FROM) unit timeline captured on each AudioSegment (the data backing the rdio-scanner 'units' array).
+ * Usage: ./gradlew runRdioUnitsReplay -Psamples=path -Pfreq=154815000 [-Pnac=0] [-Pmod=C4FM] [-Pjmbe=path] [-PmaxFiles=N]
+ */
+tasks.register('runRdioUnitsReplay', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.dsheirer.module.decode.p25.phase1.RdioUnitsReplayValidator'
+    if(os.isWindows()) {
+        jvmArgs = jvmArgsWindows
+    } else {
+        jvmArgs = jvmArgsLinux
+    }
+    def argsList = []
+    if(project.hasProperty('samples')) {
+        argsList.addAll(['--samples', project.property('samples')])
+    }
+    if(project.hasProperty('freq')) {
+        argsList.addAll(['--freq', project.property('freq')])
+    }
+    if(project.hasProperty('nac')) {
+        argsList.addAll(['--nac', project.property('nac')])
+    }
+    if(project.hasProperty('mod')) {
+        argsList.addAll(['--mod', project.property('mod')])
+    }
+    if(project.hasProperty('jmbe')) {
+        argsList.addAll(['--jmbe', project.property('jmbe')])
+    }
+    if(project.hasProperty('maxFiles')) {
+        argsList.addAll(['--max-files', project.property('maxFiles')])
+    }
+    args = argsList
+}

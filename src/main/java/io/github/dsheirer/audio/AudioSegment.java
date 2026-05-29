@@ -27,7 +27,9 @@ import io.github.dsheirer.identifier.Identifier;
 import io.github.dsheirer.identifier.IdentifierCollection;
 import io.github.dsheirer.identifier.IdentifierUpdateNotification;
 import io.github.dsheirer.identifier.MutableIdentifierCollection;
+import io.github.dsheirer.identifier.Role;
 import io.github.dsheirer.identifier.encryption.EncryptionKeyIdentifier;
+import io.github.dsheirer.identifier.radio.RadioIdentifier;
 import io.github.dsheirer.sample.Broadcaster;
 import io.github.dsheirer.sample.Listener;
 import java.util.Collection;
@@ -76,6 +78,7 @@ public class AudioSegment implements Listener<IdentifierUpdateNotification>
     private MutableIdentifierCollection mIdentifierCollection = new MutableIdentifierCollection();
     private Broadcaster<IdentifierUpdateNotification> mIdentifierUpdateNotificationBroadcaster = new Broadcaster<>();
     private List<float[]> mAudioBuffers = new CopyOnWriteArrayList();
+    private List<UnitOffset> mUnitHistory = new CopyOnWriteArrayList();
     private AtomicInteger mConsumerCount = new AtomicInteger();
     private AliasList mAliasList;
     private long mStartTimestamp = System.currentTimeMillis();
@@ -291,6 +294,19 @@ public class AudioSegment implements Listener<IdentifierUpdateNotification>
     }
 
     /**
+     * Ordered timeline of source (FROM) radio units that were active during this audio segment, each paired with the
+     * offset in seconds from the start of the audio at which the unit became active.  A new entry is added only when
+     * the active source unit changes, capturing the sequence of unit-ID changes across the call.  The first detected
+     * unit is the first element in the list.
+     *
+     * @return unmodifiable, time-ordered list of unit activity offsets (may be empty)
+     */
+    public List<UnitOffset> getUnitHistory()
+    {
+        return Collections.unmodifiableList(mUnitHistory);
+    }
+
+    /**
      * Adds the collection of identifiers to this segment's identifier collection
      * @param identifiers to pre-load into this audio segment
      */
@@ -355,6 +371,7 @@ public class AudioSegment implements Listener<IdentifierUpdateNotification>
     {
         mDisposing = true;
         mAudioBuffers.clear();
+        mUnitHistory.clear();
         mIdentifierCollection.clear();
         mIdentifierUpdateNotificationBroadcaster.clear();
         mLinkedAudioSegment = null;
@@ -440,6 +457,21 @@ public class AudioSegment implements Listener<IdentifierUpdateNotification>
     public void addIdentifier(Identifier identifier)
     {
         mIdentifierCollection.update(identifier);
+
+        /**
+         * Capture the source (FROM) radio unit timeline.  Record a new entry only when the active unit changes so the
+         * history reflects the sequence of unit-ID changes across the call, each with its offset (seconds) from the
+         * start of the audio.  The first unit is typically pre-loaded before any audio, yielding an offset of 0.
+         */
+        if(identifier instanceof RadioIdentifier radio && radio.getRole() == Role.FROM)
+        {
+            UnitOffset last = mUnitHistory.isEmpty() ? null : mUnitHistory.get(mUnitHistory.size() - 1);
+
+            if(last == null || last.radio().getValue().intValue() != radio.getValue().intValue())
+            {
+                mUnitHistory.add(new UnitOffset(radio, getDuration() / 1000.0));
+            }
+        }
 
         /**
          * If we have a late-add encryption key, set the encrypted flag to true.

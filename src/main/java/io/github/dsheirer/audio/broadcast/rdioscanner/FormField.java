@@ -41,7 +41,8 @@ public enum FormField
     TALKGROUP_GROUP("talkgroupGroup"),
     TALKGROUP_LABEL("talkgroupLabel"),
     TALKGROUP_TAG("talkgroupTag"),
-    TEST("test");
+    TEST("test"),
+    UNITS("units");
     
     private String mHeader;
 

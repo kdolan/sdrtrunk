@@ -19,12 +19,15 @@
 package io.github.dsheirer.audio.broadcast;
 
 import io.github.dsheirer.alias.id.broadcast.BroadcastChannel;
+import io.github.dsheirer.audio.UnitOffset;
 import io.github.dsheirer.identifier.IdentifierCollection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class AudioRecording implements Comparable<AudioRecording>
@@ -37,21 +40,26 @@ public class AudioRecording implements Comparable<AudioRecording>
     private AtomicInteger mPendingReplayCount = new AtomicInteger();
     private IdentifierCollection mIdentifierCollection;
     private Collection<BroadcastChannel> mBroadcastChannels;
+    private List<UnitOffset> mUnitHistory;
 
     /**
      * Audio recording that is ready to be streamed
      *
      * @param path to the audio recording file
      * @param identifierCollection associated with the recording
+     * @param unitHistory ordered timeline of source (FROM) radio units active during the recording, each with its
+     * offset in seconds from the start of the audio.  May be null or empty.
      * @param start time of recording in milliseconds since epoch
      * @param recordingLength in milliseconds
      */
     public AudioRecording(Path path, Collection<BroadcastChannel> broadcastChannels,
-                          IdentifierCollection identifierCollection, long start, long recordingLength)
+                          IdentifierCollection identifierCollection, List<UnitOffset> unitHistory,
+                          long start, long recordingLength)
     {
         mPath = path;
         mBroadcastChannels = broadcastChannels;
         mIdentifierCollection = identifierCollection;
+        mUnitHistory = unitHistory;
         mStartTime = start;
         mRecordingLength = recordingLength;
     }
@@ -86,6 +94,18 @@ public class AudioRecording implements Comparable<AudioRecording>
     public boolean hasIdentifierCollection()
     {
         return mIdentifierCollection != null;
+    }
+
+    /**
+     * Ordered timeline of source (FROM) radio units active during this recording, each paired with the offset in
+     * seconds from the start of the audio at which the unit became active.  The first detected unit is first in the
+     * list.
+     *
+     * @return unmodifiable time-ordered list of unit activity offsets (never null; empty when none captured)
+     */
+    public List<UnitOffset> getUnitHistory()
+    {
+        return mUnitHistory != null ? Collections.unmodifiableList(mUnitHistory) : Collections.emptyList();
     }
 
     /**

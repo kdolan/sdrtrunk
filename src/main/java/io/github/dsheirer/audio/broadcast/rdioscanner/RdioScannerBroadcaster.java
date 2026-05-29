@@ -19,10 +19,13 @@
 
 package io.github.dsheirer.audio.broadcast.rdioscanner;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.net.HttpHeaders;
 import io.github.dsheirer.alias.Alias;
 import io.github.dsheirer.alias.AliasList;
 import io.github.dsheirer.alias.AliasModel;
+import io.github.dsheirer.audio.UnitOffset;
 import io.github.dsheirer.audio.broadcast.AbstractAudioBroadcaster;
 import io.github.dsheirer.audio.broadcast.AudioRecording;
 import io.github.dsheirer.audio.broadcast.BroadcastEvent;
@@ -48,7 +51,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.CompletionException;
@@ -66,6 +72,7 @@ import org.slf4j.LoggerFactory;
 public class RdioScannerBroadcaster extends AbstractAudioBroadcaster<RdioScannerConfiguration>
 {
     private final static Logger mLog = LoggerFactory.getLogger(RdioScannerBroadcaster.class);
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private static final String ENCODING_TYPE_MP3 = "mp3";
     private static final String MULTIPART_TYPE = "multipart";
@@ -268,7 +275,8 @@ public class RdioScannerBroadcaster extends AbstractAudioBroadcaster<RdioScanner
                             .addPart(FormField.TALKGROUP_LABEL, talkgroupLabel)
                             .addPart(FormField.TALKGROUP_GROUP, talkgroupGroup)
                             .addPart(FormField.SYSTEM_LABEL, systemLabel)
-                            .addPart(FormField.PATCHES, patches);
+                            .addPart(FormField.PATCHES, patches)
+                            .addPart(FormField.UNITS, getUnits(audioRecording));
 
                         HttpRequest fileRequest = HttpRequest.newBuilder()
                             .uri(URI.create(getBroadcastConfiguration().getHost()))
@@ -397,10 +405,21 @@ public class RdioScannerBroadcaster extends AbstractAudioBroadcaster<RdioScanner
     }
 
     /**
-     * Creates a formatted string with the FROM identifier or uses a default of zero(0)
+     * Creates a formatted string with the first-detected FROM unit, or uses a default of zero(0).
+     *
+     * The unit timeline (when available) is the authoritative source for the first unit that keyed up, since the
+     * identifier collection only retains the most recent FROM identifier.  Falls back to scanning the identifier
+     * collection when no timeline was captured.
      */
     private static String getFrom(AudioRecording audioRecording)
     {
+        List<UnitOffset> unitHistory = audioRecording.getUnitHistory();
+
+        if(!unitHistory.isEmpty())
+        {
+            return unitHistory.get(0).radio().getValue().toString();
+        }
+
         for(Identifier identifier: audioRecording.getIdentifierCollection().getIdentifiers(Role.FROM))
         {
             if(identifier instanceof RadioIdentifier)
@@ -410,6 +429,67 @@ public class RdioScannerBroadcaster extends AbstractAudioBroadcaster<RdioScanner
         }
 
         return "0";
+    }
+
+    /**
+     * Creates the rdio-scanner 'units' JSON array describing each source (FROM) unit-ID change throughout the call.
+     * Each element is {id, label?, offset} where offset is in seconds from the start of the audio and label is the
+     * radio's alias name when one is available.
+     *
+     * @param audioRecording to build units from
+     * @return JSON array string, or null when no unit timeline is available (so the part is omitted from the upload)
+     */
+    private String getUnits(AudioRecording audioRecording)
+    {
+        AliasList aliasList = mAliasModel.getAliasList(audioRecording.getIdentifierCollection());
+        return buildUnitsJson(audioRecording.getUnitHistory(), aliasList);
+    }
+
+    /**
+     * Serializes a source-unit timeline into the rdio-scanner 'units' JSON array.  Exposed (package-private) for unit
+     * testing.
+     *
+     * @param unitHistory ordered timeline of source units with their offsets in seconds (may be null/empty)
+     * @param aliasList for resolving the optional unit label (may be null)
+     * @return JSON array string, or null when the timeline is empty
+     */
+    static String buildUnitsJson(List<UnitOffset> unitHistory, AliasList aliasList)
+    {
+        if(unitHistory == null || unitHistory.isEmpty())
+        {
+            return null;
+        }
+
+        List<Map<String,Object>> units = new ArrayList<>();
+
+        for(UnitOffset unitOffset: unitHistory)
+        {
+            Map<String,Object> entry = new LinkedHashMap<>();
+            entry.put("id", unitOffset.radio().getValue());
+
+            if(aliasList != null)
+            {
+                List<Alias> aliases = aliasList.getAliases(unitOffset.radio());
+
+                if(!aliases.isEmpty())
+                {
+                    entry.put("label", aliases.get(0).getName());
+                }
+            }
+
+            entry.put("offset", unitOffset.offsetSeconds());
+            units.add(entry);
+        }
+
+        try
+        {
+            return OBJECT_MAPPER.writeValueAsString(units);
+        }
+        catch(JsonProcessingException e)
+        {
+            mLog.error("Rdio Scanner API - error serializing units array - omitting units from upload", e);
+            return null;
+        }
     }
 
     private static String getTalkerAlias(AudioRecording audioRecording)

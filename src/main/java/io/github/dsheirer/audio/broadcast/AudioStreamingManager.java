@@ -234,7 +234,7 @@ public class AudioStreamingManager implements Listener<AudioSegment>
             AudioSegmentRecorder.record(audioSegment, path, RecordFormat.MP3, mUserPreferences, identifierCollection);
 
             AudioRecording audioRecording = new AudioRecording(path, broadcastChannels, identifierCollection,
-                    audioSegment.getStartTimestamp(), length);
+                    audioSegment.getUnitHistory(), audioSegment.getStartTimestamp(), length);
             mAudioRecordingListener.receive(audioRecording);
         }
         catch(IOException ioe)
