@@ -236,9 +236,9 @@ public class RdioScannerBroadcaster extends AbstractAudioBroadcaster<RdioScanner
                 long timestampSeconds = (int)(audioRecording.getStartTime() / 1E3);
                 String talkgroup = getTo(audioRecording);
                 String radioId = getFrom(audioRecording);
-                String units = getUnits(audioRecording);
-                mLog.info("[RDIO-UNITS] RdioScannerBroadcaster uploading call tg={} source={} units={}",
-                    talkgroup, radioId, units);
+                String sources = getUnits(audioRecording);
+                mLog.info("[RDIO-UNITS] RdioScannerBroadcaster uploading call tg={} source={} sources={}",
+                    talkgroup, radioId, sources);
                 String talkerAlias = getTalkerAlias(audioRecording);
                 Long frequency = getFrequency(audioRecording);
                 String patches = getPatches(audioRecording);
@@ -279,7 +279,7 @@ public class RdioScannerBroadcaster extends AbstractAudioBroadcaster<RdioScanner
                             .addPart(FormField.TALKGROUP_GROUP, talkgroupGroup)
                             .addPart(FormField.SYSTEM_LABEL, systemLabel)
                             .addPart(FormField.PATCHES, patches)
-                            .addPart(FormField.UNITS, units);
+                            .addPart(FormField.SOURCES, sources);
 
                         HttpRequest fileRequest = HttpRequest.newBuilder()
                             .uri(URI.create(getBroadcastConfiguration().getHost()))
@@ -435,10 +435,10 @@ public class RdioScannerBroadcaster extends AbstractAudioBroadcaster<RdioScanner
     }
 
     /**
-     * Creates the rdio-scanner 'units' JSON array describing each source (FROM) unit-ID change throughout the call.
-     * Each element is {id, offset} where offset is in seconds from the start of the audio.
+     * Creates the rdio-scanner 'sources' JSON array describing each source (FROM) unit-ID change throughout the call.
+     * Each element is {src, pos} where src is the unit ID and pos is the offset in seconds from the start of the audio.
      *
-     * @param audioRecording to build units from
+     * @param audioRecording to build the sources array from
      * @return JSON array string, or null when no unit timeline is available (so the part is omitted from the upload)
      */
     private String getUnits(AudioRecording audioRecording)
@@ -447,13 +447,13 @@ public class RdioScannerBroadcaster extends AbstractAudioBroadcaster<RdioScanner
     }
 
     /**
-     * Serializes a source-unit timeline into the rdio-scanner 'units' JSON array.  Exposed (package-private) for unit
+     * Serializes a source-unit timeline into the rdio-scanner 'sources' JSON array.  Exposed (package-private) for unit
      * testing.
      *
-     * Each entry carries only {id, offset}.  The rdio-scanner API also accepts an optional per-unit 'label', but the
-     * server does not associate it with the call's stored units - the displayed unit label is resolved server-side from
-     * rdio-scanner's own configured unit database (keyed by unit id), not from the upload - so SDRTrunk alias names are
-     * intentionally not sent.
+     * The 'sources' field name and {src, pos} keys are what the rdio-scanner call-upload API consumes (verified against
+     * server 6.6.3 and current); the newer 'units'/{id,offset} schema is NOT understood by 6.6.3, so the array must be
+     * sent as 'sources'.  Each entry carries only {src, pos} - rdio-scanner resolves the displayed unit label from its
+     * own configured unit database (keyed by unit id), so SDRTrunk alias names are intentionally not sent as a tag.
      *
      * @param unitHistory ordered timeline of source units with their offsets in seconds (may be null/empty)
      * @return JSON array string, or null when the timeline is empty
@@ -465,23 +465,23 @@ public class RdioScannerBroadcaster extends AbstractAudioBroadcaster<RdioScanner
             return null;
         }
 
-        List<Map<String,Object>> units = new ArrayList<>();
+        List<Map<String,Object>> sources = new ArrayList<>();
 
         for(UnitOffset unitOffset: unitHistory)
         {
             Map<String,Object> entry = new LinkedHashMap<>();
-            entry.put("id", unitOffset.radio().getValue());
-            entry.put("offset", unitOffset.offsetSeconds());
-            units.add(entry);
+            entry.put("src", unitOffset.radio().getValue());
+            entry.put("pos", unitOffset.offsetSeconds());
+            sources.add(entry);
         }
 
         try
         {
-            return OBJECT_MAPPER.writeValueAsString(units);
+            return OBJECT_MAPPER.writeValueAsString(sources);
         }
         catch(JsonProcessingException e)
         {
-            mLog.error("Rdio Scanner API - error serializing units array - omitting units from upload", e);
+            mLog.error("Rdio Scanner API - error serializing sources array - omitting sources from upload", e);
             return null;
         }
     }

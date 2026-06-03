@@ -51,26 +51,27 @@ public class RdioScannerUnitsTest
     }
 
     @Test
-    public void serializesIdAndOffset() throws Exception
+    public void serializesSrcAndPos() throws Exception
     {
+        //rdio-scanner's 'sources' array uses {src, pos} keys (verified against server 6.6.3 and current).
         String json = RdioScannerBroadcaster.buildUnitsJson(List.of(unit(100, 0.0), unit(200, 1.5)));
 
         JsonNode array = MAPPER.readTree(json);
         assertTrue(array.isArray());
         assertEquals(2, array.size());
 
-        assertEquals(100, array.get(0).get("id").asInt());
-        assertEquals(0.0, array.get(0).get("offset").asDouble(), 0.001);
+        assertEquals(100, array.get(0).get("src").asInt());
+        assertEquals(0.0, array.get(0).get("pos").asDouble(), 0.001);
 
-        assertEquals(200, array.get(1).get("id").asInt());
-        assertEquals(1.5, array.get(1).get("offset").asDouble(), 0.001);
+        assertEquals(200, array.get(1).get("src").asInt());
+        assertEquals(1.5, array.get(1).get("pos").asDouble(), 0.001);
     }
 
     @Test
-    public void neverIncludesLabel() throws Exception
+    public void onlySrcAndPosKeys() throws Exception
     {
-        //rdio-scanner ignores any uploaded per-unit label and resolves the displayed label from its own server-side
-        //unit database, so SDRTrunk never sends a 'label' - each entry carries only id and offset.
+        //rdio-scanner resolves the displayed unit label from its own server-side unit database, so SDRTrunk sends only
+        //{src, pos} - no 'tag'/'label', and never the older 'id'/'offset' keys that 6.6.3 does not understand.
         String json = RdioScannerBroadcaster.buildUnitsJson(List.of(unit(100, 0.0), unit(200, 2.0)));
 
         JsonNode array = MAPPER.readTree(json);
@@ -78,9 +79,12 @@ public class RdioScannerUnitsTest
 
         for(JsonNode entry : array)
         {
-            assertTrue(entry.has("id"));
-            assertTrue(entry.has("offset"));
-            assertFalse(entry.has("label"), "SDRTrunk must not send a unit label - rdio-scanner ignores it");
+            assertTrue(entry.has("src"));
+            assertTrue(entry.has("pos"));
+            assertFalse(entry.has("id"), "must use 'src', not 'id'");
+            assertFalse(entry.has("offset"), "must use 'pos', not 'offset'");
+            assertFalse(entry.has("tag"), "SDRTrunk must not send a unit tag/label - rdio-scanner ignores it");
+            assertFalse(entry.has("label"), "SDRTrunk must not send a unit tag/label - rdio-scanner ignores it");
         }
     }
 }
