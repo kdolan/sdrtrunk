@@ -236,6 +236,9 @@ public class RdioScannerBroadcaster extends AbstractAudioBroadcaster<RdioScanner
                 long timestampSeconds = (int)(audioRecording.getStartTime() / 1E3);
                 String talkgroup = getTo(audioRecording);
                 String radioId = getFrom(audioRecording);
+                String units = getUnits(audioRecording);
+                mLog.info("[RDIO-UNITS] RdioScannerBroadcaster uploading call tg={} source={} units={}",
+                    talkgroup, radioId, units);
                 String talkerAlias = getTalkerAlias(audioRecording);
                 Long frequency = getFrequency(audioRecording);
                 String patches = getPatches(audioRecording);
@@ -276,7 +279,7 @@ public class RdioScannerBroadcaster extends AbstractAudioBroadcaster<RdioScanner
                             .addPart(FormField.TALKGROUP_GROUP, talkgroupGroup)
                             .addPart(FormField.SYSTEM_LABEL, systemLabel)
                             .addPart(FormField.PATCHES, patches)
-                            .addPart(FormField.UNITS, getUnits(audioRecording));
+                            .addPart(FormField.UNITS, units);
 
                         HttpRequest fileRequest = HttpRequest.newBuilder()
                             .uri(URI.create(getBroadcastConfiguration().getHost()))

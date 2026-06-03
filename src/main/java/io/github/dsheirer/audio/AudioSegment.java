@@ -470,6 +470,13 @@ public class AudioSegment implements Listener<IdentifierUpdateNotification>
             if(last == null || last.radio().getValue().intValue() != radio.getValue().intValue())
             {
                 mUnitHistory.add(new UnitOffset(radio, getDuration() / 1000.0));
+                mLog.info("[RDIO-UNITS] AudioSegment[ts{}] ADDED FROM unit {} at offset {}s - timeline size now {}",
+                    getTimeslot(), radio.getValue(), getDuration() / 1000.0, mUnitHistory.size());
+            }
+            else
+            {
+                mLog.info("[RDIO-UNITS] AudioSegment[ts{}] FROM unit {} unchanged from last - not added (timeline size {})",
+                    getTimeslot(), radio.getValue(), mUnitHistory.size());
             }
         }
 
@@ -529,6 +536,20 @@ public class AudioSegment implements Listener<IdentifierUpdateNotification>
     @Override
     public void receive(IdentifierUpdateNotification identifierUpdateNotification)
     {
+        //[RDIO-UNITS] Diagnostic: trace every FROM radio identifier notification reaching this segment - including any
+        //filtered out by the timeslot/add checks below - to reveal whether mid-call unit changes ever get the chance
+        //to grow the source-unit timeline.
+        if(identifierUpdateNotification.getIdentifier() instanceof RadioIdentifier fromRadio &&
+            fromRadio.getRole() == Role.FROM)
+        {
+            boolean timeslotMatch = identifierUpdateNotification.getTimeslot() == getTimeslot();
+            boolean willCapture = timeslotMatch &&
+                (identifierUpdateNotification.isAdd() || identifierUpdateNotification.isSilentAdd());
+            mLog.info("[RDIO-UNITS] AudioSegment[ts{}] RECEIVED FROM unit {} op={} notifTs={} timeslotMatch={} willReachAddIdentifier={}",
+                getTimeslot(), fromRadio.getValue(), identifierUpdateNotification.getOperation(),
+                identifierUpdateNotification.getTimeslot(), timeslotMatch, willCapture);
+        }
+
         //Only process add updates that match this timeslot
         if(identifierUpdateNotification.getTimeslot() == getTimeslot())
         {

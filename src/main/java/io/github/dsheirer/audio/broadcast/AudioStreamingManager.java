@@ -235,6 +235,8 @@ public class AudioStreamingManager implements Listener<AudioSegment>
 
             AudioRecording audioRecording = new AudioRecording(path, broadcastChannels, identifierCollection,
                     audioSegment.getUnitHistory(), audioSegment.getStartTimestamp(), length);
+            mLog.info("[RDIO-UNITS] AudioStreamingManager building recording {} - source-unit timeline size {} {}",
+                    path.getFileName(), audioSegment.getUnitHistory().size(), audioSegment.getUnitHistory());
             mAudioRecordingListener.receive(audioRecording);
         }
         catch(IOException ioe)
