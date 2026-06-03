@@ -436,27 +436,29 @@ public class RdioScannerBroadcaster extends AbstractAudioBroadcaster<RdioScanner
 
     /**
      * Creates the rdio-scanner 'units' JSON array describing each source (FROM) unit-ID change throughout the call.
-     * Each element is {id, label?, offset} where offset is in seconds from the start of the audio and label is the
-     * radio's alias name when one is available.
+     * Each element is {id, offset} where offset is in seconds from the start of the audio.
      *
      * @param audioRecording to build units from
      * @return JSON array string, or null when no unit timeline is available (so the part is omitted from the upload)
      */
     private String getUnits(AudioRecording audioRecording)
     {
-        AliasList aliasList = mAliasModel.getAliasList(audioRecording.getIdentifierCollection());
-        return buildUnitsJson(audioRecording.getUnitHistory(), aliasList);
+        return buildUnitsJson(audioRecording.getUnitHistory());
     }
 
     /**
      * Serializes a source-unit timeline into the rdio-scanner 'units' JSON array.  Exposed (package-private) for unit
      * testing.
      *
+     * Each entry carries only {id, offset}.  The rdio-scanner API also accepts an optional per-unit 'label', but the
+     * server does not associate it with the call's stored units - the displayed unit label is resolved server-side from
+     * rdio-scanner's own configured unit database (keyed by unit id), not from the upload - so SDRTrunk alias names are
+     * intentionally not sent.
+     *
      * @param unitHistory ordered timeline of source units with their offsets in seconds (may be null/empty)
-     * @param aliasList for resolving the optional unit label (may be null)
      * @return JSON array string, or null when the timeline is empty
      */
-    static String buildUnitsJson(List<UnitOffset> unitHistory, AliasList aliasList)
+    static String buildUnitsJson(List<UnitOffset> unitHistory)
     {
         if(unitHistory == null || unitHistory.isEmpty())
         {
@@ -469,17 +471,6 @@ public class RdioScannerBroadcaster extends AbstractAudioBroadcaster<RdioScanner
         {
             Map<String,Object> entry = new LinkedHashMap<>();
             entry.put("id", unitOffset.radio().getValue());
-
-            if(aliasList != null)
-            {
-                List<Alias> aliases = aliasList.getAliases(unitOffset.radio());
-
-                if(!aliases.isEmpty())
-                {
-                    entry.put("label", aliases.get(0).getName());
-                }
-            }
-
             entry.put("offset", unitOffset.offsetSeconds());
             units.add(entry);
         }

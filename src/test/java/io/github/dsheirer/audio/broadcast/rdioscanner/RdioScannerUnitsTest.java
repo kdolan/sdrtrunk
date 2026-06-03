@@ -21,12 +21,8 @@ package io.github.dsheirer.audio.broadcast.rdioscanner;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.dsheirer.alias.Alias;
-import io.github.dsheirer.alias.AliasList;
-import io.github.dsheirer.alias.id.radio.Radio;
 import io.github.dsheirer.audio.UnitOffset;
 import io.github.dsheirer.module.decode.p25.identifier.radio.APCO25RadioIdentifier;
-import io.github.dsheirer.protocol.Protocol;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -50,14 +46,14 @@ public class RdioScannerUnitsTest
     @Test
     public void nullForEmptyOrNullHistory() throws Exception
     {
-        assertNull(RdioScannerBroadcaster.buildUnitsJson(null, null));
-        assertNull(RdioScannerBroadcaster.buildUnitsJson(List.of(), null));
+        assertNull(RdioScannerBroadcaster.buildUnitsJson(null));
+        assertNull(RdioScannerBroadcaster.buildUnitsJson(List.of()));
     }
 
     @Test
-    public void serializesIdAndOffsetWithoutAliasList() throws Exception
+    public void serializesIdAndOffset() throws Exception
     {
-        String json = RdioScannerBroadcaster.buildUnitsJson(List.of(unit(100, 0.0), unit(200, 1.5)), null);
+        String json = RdioScannerBroadcaster.buildUnitsJson(List.of(unit(100, 0.0), unit(200, 1.5)));
 
         JsonNode array = MAPPER.readTree(json);
         assertTrue(array.isArray());
@@ -65,31 +61,26 @@ public class RdioScannerUnitsTest
 
         assertEquals(100, array.get(0).get("id").asInt());
         assertEquals(0.0, array.get(0).get("offset").asDouble(), 0.001);
-        assertFalse(array.get(0).has("label"), "No alias list -> no label");
 
         assertEquals(200, array.get(1).get("id").asInt());
         assertEquals(1.5, array.get(1).get("offset").asDouble(), 0.001);
     }
 
     @Test
-    public void includesLabelWhenAliasExists() throws Exception
+    public void neverIncludesLabel() throws Exception
     {
-        AliasList aliasList = new AliasList("test");
-        Alias alias = new Alias("Engine 51");
-        alias.addAliasID(new Radio(Protocol.APCO25, 100));
-        aliasList.addAlias(alias);
-
-        String json = RdioScannerBroadcaster.buildUnitsJson(List.of(unit(100, 0.0), unit(200, 2.0)), aliasList);
+        //rdio-scanner ignores any uploaded per-unit label and resolves the displayed label from its own server-side
+        //unit database, so SDRTrunk never sends a 'label' - each entry carries only id and offset.
+        String json = RdioScannerBroadcaster.buildUnitsJson(List.of(unit(100, 0.0), unit(200, 2.0)));
 
         JsonNode array = MAPPER.readTree(json);
         assertEquals(2, array.size());
 
-        //Unit 100 has an alias -> label present
-        assertEquals(100, array.get(0).get("id").asInt());
-        assertEquals("Engine 51", array.get(0).get("label").asText());
-
-        //Unit 200 has no matching alias -> no label
-        assertEquals(200, array.get(1).get("id").asInt());
-        assertFalse(array.get(1).has("label"), "Unit without an alias should have no label");
+        for(JsonNode entry : array)
+        {
+            assertTrue(entry.has("id"));
+            assertTrue(entry.has("offset"));
+            assertFalse(entry.has("label"), "SDRTrunk must not send a unit label - rdio-scanner ignores it");
+        }
     }
 }
