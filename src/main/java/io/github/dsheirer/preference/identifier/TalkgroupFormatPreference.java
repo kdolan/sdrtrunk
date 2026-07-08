@@ -146,10 +146,12 @@ public class TalkgroupFormatPreference extends Preference
             case LTR_NET:
             case MPT1327:
                 return IntegerFormat.FORMATTED;
+            case MDC1200:
+                //MDC-1200 unit IDs are conventionally 4-digit hexadecimal.
+                return IntegerFormat.HEXADECIMAL;
             case AM:
             case APCO25:
             case DMR:
-            case MDC1200:
             case NBFM:
             case PASSPORT:
             case UNKNOWN:
@@ -183,7 +185,6 @@ public class TalkgroupFormatPreference extends Preference
     {
         switch(protocol)
         {
-            case MDC1200:
             case PASSPORT:
                 return false;
             case AM:
@@ -192,6 +193,7 @@ public class TalkgroupFormatPreference extends Preference
             case FLEETSYNC:
             case LTR:
             case LTR_NET:
+            case MDC1200:
             case MPT1327:
             case NBFM:
             case UNKNOWN:
