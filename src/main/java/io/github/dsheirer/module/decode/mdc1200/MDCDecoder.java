@@ -36,25 +36,33 @@ public class MDCDecoder extends AbstractAFSKDecoder
     //Allowed bit errors in the 40-bit preamble for soft sync matching. Soft matching is safe
     //because MDC1200FEC runs convolutional forward-error-correction + CRC-16-CCITT over each
     //framed message; noise matches that happen to satisfy soft sync will fail the CRC and be
-    //rejected by MDCDecoderState.receive(). Threshold 8 is ~20% BER tolerance on the preamble,
-    //roughly matching what marginal real signals exhibit.
-    //Override with -Dmdc.sync.threshold=N for field experimentation.
-    private static final int SYNC_BIT_ERROR_THRESHOLD =
+    //rejected by MDCDecoderState.receive(). Default 8 is ~20% BER tolerance on the preamble,
+    //roughly matching what marginal real signals exhibit. Configurable via the MDC-1200 user
+    //preference (Mdc1200Preference), or -Dmdc.sync.threshold=N for field experimentation.
+    private static final int DEFAULT_SYNC_BIT_ERROR_THRESHOLD =
         Integer.getInteger("mdc.sync.threshold", 8);
 
+    private final int mSyncBitErrorThreshold;
     private NRZDecoder mNRZDecoder;
     private MessageFramer mMessageFramer;
     private MDCMessageProcessor mMessageProcessor;
 
     public MDCDecoder()
     {
+        this(DEFAULT_SYNC_BIT_ERROR_THRESHOLD);
+    }
+
+    public MDCDecoder(int syncBitErrorThreshold)
+    {
         super(AFSK1200Decoder.Output.INVERTED);
+        mSyncBitErrorThreshold = syncBitErrorThreshold;
         init();
     }
 
     protected MDCDecoder(AFSK1200Decoder decoder)
     {
         super(decoder);
+        mSyncBitErrorThreshold = DEFAULT_SYNC_BIT_ERROR_THRESHOLD;
         init();
     }
 
@@ -63,7 +71,7 @@ public class MDCDecoder extends AbstractAFSKDecoder
         mNRZDecoder = new NRZDecoder(NRZDecoder.MODE_INVERTED);
         getDecoder().setSymbolProcessor(mNRZDecoder);
         mMessageFramer = new MessageFramer(SyncPattern.MDC1200.getPattern(), MESSAGE_LENGTH,
-            SYNC_BIT_ERROR_THRESHOLD);
+            mSyncBitErrorThreshold);
         mNRZDecoder.setListener(mMessageFramer);
         mMessageProcessor = new MDCMessageProcessor();
         mMessageFramer.addMessageListener(mMessageProcessor);

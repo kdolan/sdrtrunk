@@ -65,10 +65,18 @@ public class MDCMessageProcessor implements Listener<CorrectedBinaryMessage>
         boolean block1Valid = MDC1200FEC.correctAndValidate(buffer, 40);
 
         /**
+         * Double-length packets carry a second block at offset 192. Validate it only when block one
+         * already passed - a valid second block requires a valid first block, and validating on a
+         * soft-sync false positive would only waste cycles. The CRC gates it, so a true result is a
+         * reliable indicator that a real second block is present.
+         */
+        boolean block2Valid = block1Valid && MDC1200FEC.correctAndValidate(buffer, 192);
+
+        /**
          * Wrap the buffer in a message along with the designated alias list
          * and send it on its merry way
          */
-        MDCMessage message = new MDCMessage(buffer, block1Valid);
+        MDCMessage message = new MDCMessage(buffer, block1Valid, block2Valid);
 
         mBroadcaster.receive(message);
     }

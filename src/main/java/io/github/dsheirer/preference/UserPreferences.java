@@ -23,6 +23,7 @@ import io.github.dsheirer.eventbus.MyEventBus;
 import io.github.dsheirer.preference.application.ApplicationPreference;
 import io.github.dsheirer.preference.calibration.VectorCalibrationPreference;
 import io.github.dsheirer.preference.decoder.JmbeLibraryPreference;
+import io.github.dsheirer.preference.decoder.Mdc1200Preference;
 import io.github.dsheirer.preference.directory.DirectoryPreference;
 import io.github.dsheirer.preference.duplicate.CallManagementPreference;
 import io.github.dsheirer.preference.event.DecodeEventPreference;
@@ -62,6 +63,7 @@ public class UserPreferences implements Listener<PreferenceType>
     private DirectoryPreference mDirectoryPreference;
     private CallManagementPreference mCallManagementPreference;
     private JmbeLibraryPreference mJmbeLibraryPreference;
+    private Mdc1200Preference mMdc1200Preference;
     private MP3Preference mMP3Preference;
     private PlaybackPreference mPlaybackPreference;
     private PlaylistPreference mPlaylistPreference;
@@ -189,6 +191,14 @@ public class UserPreferences implements Listener<PreferenceType>
     }
 
     /**
+     * MDC-1200 decoder preferences
+     */
+    public Mdc1200Preference getMdc1200Preference()
+    {
+        return mMdc1200Preference;
+    }
+
+    /**
      * Tuner preferences
      */
     public TunerPreference getTunerPreference()
@@ -224,6 +234,7 @@ public class UserPreferences implements Listener<PreferenceType>
         mDirectoryPreference = new DirectoryPreference(this::receive);
         mCallManagementPreference = new CallManagementPreference(this::receive);
         mJmbeLibraryPreference = new JmbeLibraryPreference(this::receive);
+        mMdc1200Preference = new Mdc1200Preference(this::receive);
         mMP3Preference = new MP3Preference(this::receive);
         mPlaybackPreference = new PlaybackPreference(this::receive);
         mPlaylistPreference = new PlaylistPreference(this::receive, mDirectoryPreference);

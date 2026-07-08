@@ -50,6 +50,7 @@ import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.Spinner;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextFormatter;
 import javafx.scene.control.TitledPane;
@@ -76,6 +77,8 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
     private ComboBox<CTCSSFrequency> mCTCSSComboBox;
     private TextFormatter<Integer> mTalkgroupTextFormatter;
     private ToggleSwitch mBasebandRecordSwitch;
+    private ToggleSwitch mActivityRecordSwitch;
+    private Spinner<Integer> mActivityThresholdSpinner;
     private SegmentedButton mBandwidthButton;
 
     private SourceConfigurationEditor mSourceConfigurationEditor;
@@ -217,6 +220,22 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
             GridPane.setHalignment(recordBasebandLabel, HPos.LEFT);
             GridPane.setConstraints(recordBasebandLabel, 1, 0);
             gridPane.getChildren().add(recordBasebandLabel);
+
+            GridPane.setConstraints(getActivityRecordSwitch(), 0, 1);
+            gridPane.getChildren().add(getActivityRecordSwitch());
+
+            Label activityLabel = new Label("Activity-Triggered Baseband Recording (small per-transmission I&Q clips)");
+            GridPane.setHalignment(activityLabel, HPos.LEFT);
+            GridPane.setConstraints(activityLabel, 1, 1);
+            gridPane.getChildren().add(activityLabel);
+
+            GridPane.setConstraints(getActivityThresholdSpinner(), 0, 2);
+            gridPane.getChildren().add(getActivityThresholdSpinner());
+
+            Label thresholdLabel = new Label("Activity Squelch Threshold (dB)");
+            GridPane.setHalignment(thresholdLabel, HPos.LEFT);
+            GridPane.setConstraints(thresholdLabel, 1, 2);
+            gridPane.getChildren().add(thresholdLabel);
 
             mRecordPane.setContent(gridPane);
         }
@@ -425,6 +444,43 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
         return mBasebandRecordSwitch;
     }
 
+    private ToggleSwitch getActivityRecordSwitch()
+    {
+        if(mActivityRecordSwitch == null)
+        {
+            mActivityRecordSwitch = new ToggleSwitch();
+            mActivityRecordSwitch.setDisable(true);
+            mActivityRecordSwitch.setTextAlignment(TextAlignment.RIGHT);
+            mActivityRecordSwitch.setTooltip(new Tooltip("Records a small baseband I/Q clip for each " +
+                "transmission whose RF energy exceeds the squelch threshold. Pre-buffers audio so leading-edge " +
+                "signaling (e.g. MDC-1200 PTT-ID) is captured."));
+            mActivityRecordSwitch.selectedProperty().addListener((observable, oldValue, newValue) ->
+            {
+                modifiedProperty().set(true);
+                getActivityThresholdSpinner().setDisable(!newValue);
+            });
+        }
+
+        return mActivityRecordSwitch;
+    }
+
+    private Spinner<Integer> getActivityThresholdSpinner()
+    {
+        if(mActivityThresholdSpinner == null)
+        {
+            mActivityThresholdSpinner = new Spinner<>(-100, -30,
+                (int)RecordConfiguration.DEFAULT_ACTIVITY_SQUELCH_THRESHOLD, 5);
+            mActivityThresholdSpinner.setEditable(true);
+            mActivityThresholdSpinner.setDisable(true);
+            mActivityThresholdSpinner.setTooltip(new Tooltip("RF power level (dB) above which activity-triggered " +
+                "recording captures a clip"));
+            mActivityThresholdSpinner.valueProperty()
+                .addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));
+        }
+
+        return mActivityThresholdSpinner;
+    }
+
     @Override
     protected void setDecoderConfiguration(DecodeConfiguration config)
     {
@@ -553,11 +609,20 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
         {
             getBasebandRecordSwitch().setDisable(false);
             getBasebandRecordSwitch().selectedProperty().set(config.contains(RecorderType.BASEBAND));
+
+            getActivityRecordSwitch().setDisable(false);
+            getActivityRecordSwitch().selectedProperty().set(config.isActivityTriggeredRecording());
+            getActivityThresholdSpinner().getValueFactory().setValue((int)config.getActivitySquelchThreshold());
+            getActivityThresholdSpinner().setDisable(!config.isActivityTriggeredRecording());
         }
         else
         {
             getBasebandRecordSwitch().selectedProperty().set(false);
             getBasebandRecordSwitch().setDisable(true);
+
+            getActivityRecordSwitch().selectedProperty().set(false);
+            getActivityRecordSwitch().setDisable(true);
+            getActivityThresholdSpinner().setDisable(true);
         }
     }
 
@@ -570,6 +635,9 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
         {
             config.addRecorder(RecorderType.BASEBAND);
         }
+
+        config.setActivityTriggeredRecording(getActivityRecordSwitch().selectedProperty().get());
+        config.setActivitySquelchThreshold(getActivityThresholdSpinner().getValue());
 
         getItem().setRecordConfiguration(config);
     }

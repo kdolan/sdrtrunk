@@ -52,16 +52,23 @@ public class MDCMessage extends Message
     private MDC1200Identifier mFromIdentifier;
     private List<Identifier> mIdentifiers;
     private boolean mValid;
+    private boolean mExtendedBlockValid;
 
     public MDCMessage(CorrectedBinaryMessage message)
     {
-        this(message, true);
+        this(message, true, false);
     }
 
     public MDCMessage(CorrectedBinaryMessage message, boolean valid)
     {
+        this(message, valid, false);
+    }
+
+    public MDCMessage(CorrectedBinaryMessage message, boolean valid, boolean extendedBlockValid)
+    {
         mMessage = message;
         mValid = valid;
+        mExtendedBlockValid = extendedBlockValid;
     }
 
     public CorrectedBinaryMessage getMessage()
@@ -94,6 +101,15 @@ public class MDCMessage extends Message
     public boolean isValid()
     {
         return mValid;
+    }
+
+    /**
+     * Indicates whether a valid second (extended) data block was decoded, i.e. this is a
+     * double-length packet whose block-2 CRC passed.
+     */
+    public boolean isExtendedBlockValid()
+    {
+        return mExtendedBlockValid;
     }
 
     public PacketType getPacketType()
@@ -168,10 +184,9 @@ public class MDCMessage extends Message
         switch(getOpcode())
         {
             case 0:
-                if(isEmergency())
-                {
-                    return MDCMessageType.EMERGENCY;
-                }
+                //Opcode 0 with the emergency flag set is an emergency; otherwise it is treated as
+                //ANI, same as opcode 1. (Made explicit - previously relied on switch fall-through.)
+                return isEmergency() ? MDCMessageType.EMERGENCY : MDCMessageType.ANI;
             case 1:
                 return MDCMessageType.ANI;
             default:
@@ -220,6 +235,11 @@ public class MDCMessage extends Message
         if(isEOT())
         {
             sb.append(" EOT");
+        }
+
+        if(isExtendedBlockValid())
+        {
+            sb.append(" +EXT");
         }
 
         sb.append(" OPCODE:").append(format(getOpcode(), 2));

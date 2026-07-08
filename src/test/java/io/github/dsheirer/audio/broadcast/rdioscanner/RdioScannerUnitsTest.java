@@ -22,6 +22,7 @@ package io.github.dsheirer.audio.broadcast.rdioscanner;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.dsheirer.audio.UnitOffset;
+import io.github.dsheirer.module.decode.mdc1200.identifier.MDC1200Identifier;
 import io.github.dsheirer.module.decode.p25.identifier.radio.APCO25RadioIdentifier;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -65,6 +66,20 @@ public class RdioScannerUnitsTest
 
         assertEquals(200, array.get(1).get("src").asInt());
         assertEquals(1.5, array.get(1).get("pos").asDouble(), 0.001);
+    }
+
+    @Test
+    public void serializesMdc1200UnitAsSource() throws Exception
+    {
+        //MDC-1200 unit IDs are radio (source) identifiers, so a leading-edge PTT-ID lands as a call source.
+        String json = RdioScannerBroadcaster.buildUnitsJson(
+            List.of(new UnitOffset(MDC1200Identifier.createFrom(8004), 0.0)));
+
+        JsonNode array = MAPPER.readTree(json);
+        assertTrue(array.isArray());
+        assertEquals(1, array.size());
+        assertEquals(8004, array.get(0).get("src").asInt());
+        assertEquals(0.0, array.get(0).get("pos").asDouble(), 0.001);
     }
 
     @Test

@@ -55,6 +55,7 @@ import io.github.dsheirer.module.decode.event.IDecodeEventProvider;
 import io.github.dsheirer.module.decode.traffic.TrafficChannelManager;
 import io.github.dsheirer.module.log.EventLogger;
 import io.github.dsheirer.record.binary.BinaryRecorder;
+import io.github.dsheirer.record.wave.ActivityTriggeredWaveRecorder;
 import io.github.dsheirer.record.wave.ComplexSamplesWaveRecorder;
 import io.github.dsheirer.sample.Broadcaster;
 import io.github.dsheirer.sample.Listener;
@@ -863,6 +864,10 @@ public class ProcessingChain implements Listener<ChannelEvent>
             for(Module module : mModules)
             {
                 if(module instanceof ComplexSamplesWaveRecorder)
+                {
+                    recordingModules.add(module);
+                }
+                else if(module instanceof ActivityTriggeredWaveRecorder)
                 {
                     recordingModules.add(module);
                 }

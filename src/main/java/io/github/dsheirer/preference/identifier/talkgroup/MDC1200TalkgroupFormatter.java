@@ -20,6 +20,7 @@
 
 package io.github.dsheirer.preference.identifier.talkgroup;
 
+import io.github.dsheirer.identifier.radio.RadioIdentifier;
 import io.github.dsheirer.identifier.talkgroup.TalkgroupIdentifier;
 import io.github.dsheirer.preference.identifier.IntegerFormat;
 
@@ -32,6 +33,39 @@ public class MDC1200TalkgroupFormatter extends AbstractIntegerFormatter
      * Formats the individual or group identifier to the specified format and width.
      */
     public static String format(TalkgroupIdentifier identifier, IntegerFormat format, boolean fixedWidth)
+    {
+        if(fixedWidth)
+        {
+            switch(format)
+            {
+                case DECIMAL:
+                case FORMATTED:
+                    return toDecimal(identifier.getValue(), DECIMAL_WIDTH);
+                case HEXADECIMAL:
+                    return toHex(identifier.getValue(), HEXADECIMAL_WIDTH);
+                default:
+                    throw new IllegalArgumentException("Unrecognized integer format: " + format);
+            }
+        }
+        else
+        {
+            switch(format)
+            {
+                case DECIMAL:
+                case FORMATTED:
+                    return identifier.getValue().toString();
+                case HEXADECIMAL:
+                    return toHex(identifier.getValue());
+                default:
+                    throw new IllegalArgumentException("Unrecognized integer format: " + format);
+            }
+        }
+    }
+
+    /**
+     * Formats an MDC-1200 (source) radio identifier to the specified format and width.
+     */
+    public static String format(RadioIdentifier identifier, IntegerFormat format, boolean fixedWidth)
     {
         if(fixedWidth)
         {

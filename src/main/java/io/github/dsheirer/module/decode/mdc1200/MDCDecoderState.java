@@ -22,13 +22,10 @@ import io.github.dsheirer.channel.state.DecoderState;
 import io.github.dsheirer.channel.state.DecoderStateEvent;
 import io.github.dsheirer.channel.state.DecoderStateEvent.Event;
 import io.github.dsheirer.channel.state.State;
-import io.github.dsheirer.identifier.IdentifierClass;
-import io.github.dsheirer.identifier.MutableIdentifierCollection;
 import io.github.dsheirer.message.IMessage;
 import io.github.dsheirer.module.decode.DecoderType;
 import io.github.dsheirer.module.decode.event.DecodeEventType;
 import io.github.dsheirer.module.decode.mdc1200.identifier.MDC1200Identifier;
-import java.util.Iterator;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -83,28 +80,14 @@ public class MDCDecoderState extends DecoderState
 
             MDCMessageType type = mdc.getMessageType();
 
-            StringBuilder sb = new StringBuilder();
-
-            sb.append("OPCODE ");
-            sb.append(mdc.getOpcode());
-
-            if(mdc.isBOT())
-            {
-                sb.append(" TYPE:BOT");
-            }
-
-            if(mdc.isEOT())
-            {
-                sb.append(" TYPE:EOT");
-            }
-
-            MutableIdentifierCollection ic = new MutableIdentifierCollection(getIdentifierCollection().getIdentifiers());
-            ic.remove(IdentifierClass.USER);
-            ic.update(message.getIdentifiers());
+            //Update the persistent identifier collection so the FROM unit ID broadcasts an
+            //IdentifierUpdateNotification through the processing chain to the audio pipeline, feeding
+            //the rdio-scanner source-unit timeline.  This mirrors the digital decoder states.
+            getIdentifierCollection().update(mdc.getIdentifiers());
 
             broadcast(MDCDecodeEvent.builder(getDecodeEventType(type), mdc.getTimestamp())
                 .details(mdc.toString())
-                .identifiers(ic)
+                .identifiers(getIdentifierCollection().copyOf())
                 .build());
 
             switch(type)
@@ -153,14 +136,9 @@ public class MDCDecoderState extends DecoderState
         }
         else
         {
-            Iterator<MDC1200Identifier> it = mEmergencyIdents.iterator();
-
-            while(it.hasNext())
+            for(MDC1200Identifier mIdent : mEmergencyIdents)
             {
-
-                for (MDC1200Identifier mIdent : mIdents) {
-                    sb.append("  ").append(mIdent).append("\n");
-                }
+                sb.append("  ").append(mIdent).append("\n");
             }
         }
 

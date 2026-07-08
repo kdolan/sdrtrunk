@@ -19,8 +19,12 @@
 package io.github.dsheirer.module.decode.mdc1200;
 
 import io.github.dsheirer.bits.CorrectedBinaryMessage;
+import io.github.dsheirer.message.IMessage;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -196,6 +200,83 @@ class MDC1200FECTest
 
         assertEquals(false, valid,
             "CRC should reject a frame with extensive bit errors — no phantom decode");
+    }
+
+    /**
+     * A double-length packet has a valid second block at offset 192. Feed a full frame through the
+     * real {@link MDCMessageProcessor#receive} path and confirm both blocks validate.
+     */
+    @Test
+    void receive_decodesSecondBlock()
+    {
+        byte[] block1 = new byte[14];
+        block1[0] = 0x01;          //opcode: PTT ID
+        block1[2] = 0x1F;          //unit-id hi (8004)
+        block1[3] = 0x44;          //unit-id lo
+
+        byte[] block2 = new byte[14];
+        block2[0] = 0x2A;          //arbitrary extended-block payload
+        block2[3] = 0x55;
+
+        CorrectedBinaryMessage buffer = new CorrectedBinaryMessage(304);
+        placeEncodedBlock(buffer, encodeFrame(block1), 40);
+        placeEncodedBlock(buffer, encodeFrame(block2), 192);
+
+        MDCMessage message = process(buffer);
+        assertNotNull(message);
+        assertTrue(message.isValid(), "block one should validate");
+        assertTrue(message.isExtendedBlockValid(), "block two should validate for a double-length packet");
+        assertEquals("8004", message.getFromIdentifier().getValue().toString());
+    }
+
+    /**
+     * A single-block frame (block-2 region empty) must not report a valid extended block.
+     */
+    @Test
+    void receive_singleBlockHasNoExtendedBlock()
+    {
+        byte[] block1 = new byte[14];
+        block1[0] = 0x01;
+        block1[2] = 0x1F;
+        block1[3] = 0x44;
+
+        CorrectedBinaryMessage buffer = new CorrectedBinaryMessage(304);
+        placeEncodedBlock(buffer, encodeFrame(block1), 40);
+        //block-2 region (bits 192..303) left as zeros - no valid second block present
+
+        MDCMessage message = process(buffer);
+        assertNotNull(message);
+        assertTrue(message.isValid(), "block one should validate");
+        assertFalse(message.isExtendedBlockValid(), "empty block-2 region must not validate");
+    }
+
+    /**
+     * Runs a buffer through the production {@link MDCMessageProcessor} and returns the emitted message.
+     */
+    private static MDCMessage process(CorrectedBinaryMessage buffer)
+    {
+        MDCMessageProcessor processor = new MDCMessageProcessor();
+        AtomicReference<IMessage> captured = new AtomicReference<>();
+        processor.addMessageListener(captured::set);
+        processor.receive(buffer);
+        return (MDCMessage)captured.get();
+    }
+
+    /**
+     * Packs a 14-byte (112-bit) interleaved block into the buffer starting at the given bit offset,
+     * MSB-first, matching the framer's bit ordering.
+     */
+    private static void placeEncodedBlock(CorrectedBinaryMessage buffer, byte[] encoded, int offset)
+    {
+        for(int bit = 0; bit < 112; bit++)
+        {
+            int byteIdx = bit / 8;
+            int bitInByte = 7 - (bit % 8);
+            if(((encoded[byteIdx] >> bitInByte) & 1) != 0)
+            {
+                buffer.set(offset + bit);
+            }
+        }
     }
 
     /**

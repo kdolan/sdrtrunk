@@ -107,6 +107,7 @@ import io.github.dsheirer.module.decode.tait.Tait1200MessageFilter;
 import io.github.dsheirer.module.decode.traffic.TrafficChannelManager;
 import io.github.dsheirer.module.demodulate.fm.FMDemodulatorModule;
 import io.github.dsheirer.preference.UserPreferences;
+import io.github.dsheirer.preference.decoder.Mdc1200Preference;
 import io.github.dsheirer.source.SourceType;
 import io.github.dsheirer.source.config.SourceConfigTunerMultipleFrequency;
 import io.github.dsheirer.source.tuner.channel.rotation.ChannelRotationMonitor;
@@ -136,7 +137,7 @@ public class DecoderFactory
     {
         List<Module> modules = getPrimaryModules(channelMapModel, channel, aliasModel, userPreferences,
                 trafficChannelManager, channelDescriptor);
-        modules.addAll(getAuxiliaryDecoders(channel.getAuxDecodeConfiguration()));
+        modules.addAll(getAuxiliaryDecoders(channel.getAuxDecodeConfiguration(), userPreferences));
         return modules;
     }
 
@@ -643,7 +644,7 @@ public class DecoderFactory
      * @param config - auxiliary configuration
      * @return - list of auxiliary decoders
      */
-    public static List<Module> getAuxiliaryDecoders(AuxDecodeConfiguration config)
+    public static List<Module> getAuxiliaryDecoders(AuxDecodeConfiguration config, UserPreferences userPreferences)
     {
         List<Module> modules = new ArrayList<>();
 
@@ -662,7 +663,10 @@ public class DecoderFactory
                         modules.add(new Fleetsync2DecoderState());
                         break;
                     case MDC1200:
-                        modules.add(new MDCDecoder());
+                        int mdcSyncThreshold = userPreferences != null
+                            ? userPreferences.getMdc1200Preference().getSyncBitErrorThreshold()
+                            : Mdc1200Preference.DEFAULT_SYNC_BIT_ERROR_THRESHOLD;
+                        modules.add(new MDCDecoder(mdcSyncThreshold));
                         modules.add(new MDCDecoderState());
                         break;
                     case LJ_1200:
