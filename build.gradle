@@ -737,6 +737,31 @@ tasks.register('runMdcReplay', JavaExec) {
 }
 
 /**
+ * MDC-1200 batch detection evaluator: runs the decoder over a directory of baseband I/Q captures
+ * and reports production vs oracle detection counts.
+ * Usage: ./gradlew runMdcBatch -Pdir=/home/kdolan/GitHub/sdrtrunk/_recordings [-Pout=build/mdc-eval.txt]
+ */
+tasks.register('runMdcBatch', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.dsheirer.module.decode.mdc1200.MDCBatchEvaluator'
+    if(os.isWindows()) {
+        jvmArgs = jvmArgsWindows
+    } else {
+        jvmArgs = jvmArgsLinux
+    }
+    if(project.hasProperty('dir')) {
+        systemProperty 'mdc.eval.dir', project.property('dir')
+    }
+    if(project.hasProperty('out')) {
+        systemProperty 'mdc.eval.out', project.property('out')
+    }
+    if(project.hasProperty('threshold')) {
+        systemProperty 'mdc.eval.threshold', project.property('threshold')
+    }
+}
+
+/**
  * Pipeline replay diagnostic: feeds baseband WAV through the FULL live ProcessingChain
  * (DecoderState, StateMachine, SquelchController, AudioModule) to diagnose live-only bugs.
  * Usage: ./gradlew runPipelineReplay -Psamples=path -Pfreq=154175000 -Pnac=2311 [-Pmod=C4FM] [-Pjmbe=path]

@@ -21,9 +21,11 @@ package io.github.dsheirer.dsp.afsk;
 import io.github.dsheirer.bits.IBinarySymbolProcessor;
 import io.github.dsheirer.buffer.FloatAveragingBuffer;
 import io.github.dsheirer.dsp.filter.resample.RealResampler;
+import io.github.dsheirer.dsp.oscillator.IComplexOscillator;
 import io.github.dsheirer.dsp.oscillator.IRealOscillator;
 import io.github.dsheirer.dsp.oscillator.OscillatorFactory;
 import io.github.dsheirer.sample.Listener;
+import io.github.dsheirer.sample.complex.ComplexSamples;
 import org.apache.commons.math3.util.FastMath;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,8 +58,8 @@ public class AFSK1200Decoder implements Listener<float[]>
     public static final double SPACE = 1800.0;
     public static final float TIMING_ERROR_GAIN = 1.0f / 3.0f; //Timing error adjustments over 3 symbol periods
 
-    private Correlator mCorrelatorMark = new Correlator(SAMPLE_RATE, MARK, AVERAGING_PERIOD, CORRELATION_PERIOD);
-    private Correlator mCorrelatorSpace = new Correlator(SAMPLE_RATE, SPACE, AVERAGING_PERIOD, CORRELATION_PERIOD);
+    private Correlator mCorrelatorMark;
+    private Correlator mCorrelatorSpace;
     private float[] mCorrelationValuesMark;
     private float[] mCorrelationValuesSpace;
 
@@ -72,7 +74,7 @@ public class AFSK1200Decoder implements Listener<float[]>
     private RealResampler mResampler = new RealResampler(8000.0, SAMPLE_RATE, 8192, 512);
 
     /**
-     * Constructs a decoder using the provided arguments.
+     * Constructs a decoder using the provided arguments with the default (real, phase-sensitive) correlator.
      *
      * @param sampleBuffer for storing incoming samples and calculating symbols
      * @param detector for timing error alignment
@@ -80,6 +82,24 @@ public class AFSK1200Decoder implements Listener<float[]>
      */
     public AFSK1200Decoder(AFSKSampleBuffer sampleBuffer, AFSKTimingErrorDetector detector, Output output)
     {
+        this(sampleBuffer, detector, output, false);
+    }
+
+    /**
+     * Constructs a decoder using the provided arguments.
+     *
+     * @param sampleBuffer for storing incoming samples and calculating symbols
+     * @param detector for timing error alignment
+     * @param output NORMAL: 1200Hz = Mark(1) and 1800Hz = Space(0), or INVERTED (vice-versa)
+     * @param quadratureCorrelation when true, use a phase-invariant I/Q correlation magnitude
+     *      (sqrt(I^2+Q^2)) instead of the single real reference. More robust to marginal-signal
+     *      phase, at ~2x correlator cost. Used to form a complementary diversity branch.
+     */
+    public AFSK1200Decoder(AFSKSampleBuffer sampleBuffer, AFSKTimingErrorDetector detector, Output output,
+                           boolean quadratureCorrelation)
+    {
+        mCorrelatorMark = new Correlator(SAMPLE_RATE, MARK, AVERAGING_PERIOD, CORRELATION_PERIOD, quadratureCorrelation);
+        mCorrelatorSpace = new Correlator(SAMPLE_RATE, SPACE, AVERAGING_PERIOD, CORRELATION_PERIOD, quadratureCorrelation);
         mTimingErrorDetector = detector;
         mSampleBuffer = sampleBuffer;
         mSampleBuffer.setTimingGain(mSymbolTimingGain);
@@ -88,14 +108,25 @@ public class AFSK1200Decoder implements Listener<float[]>
     }
 
     /**
-     * Constructs a decoder using the provided arguments.
+     * Constructs a decoder with the default (real) correlator.
      *
      * @param output NORMAL: 1200Hz = Mark(1) and 1800Hz = Space(0), or INVERTED (vice-versa)
      */
     public AFSK1200Decoder(Output output)
     {
+        this(output, false);
+    }
+
+    /**
+     * Constructs a decoder using the provided arguments.
+     *
+     * @param output NORMAL: 1200Hz = Mark(1) and 1800Hz = Space(0), or INVERTED (vice-versa)
+     * @param quadratureCorrelation true to use the phase-invariant I/Q correlator
+     */
+    public AFSK1200Decoder(Output output, boolean quadratureCorrelation)
+    {
         this(new AFSKSampleBuffer(SAMPLES_PER_SYMBOL, TIMING_ERROR_GAIN),
-            new AFSKTimingErrorDetector(SAMPLES_PER_SYMBOL), output);
+            new AFSKTimingErrorDetector(SAMPLES_PER_SYMBOL), output, quadratureCorrelation);
     }
 
     /**
@@ -186,7 +217,10 @@ public class AFSK1200Decoder implements Listener<float[]>
     public class Correlator
     {
         private FloatAveragingBuffer mAveragingBuffer;
-        private float[] mReferenceSamples;
+        private final boolean mQuadrature;
+        private float[] mReferenceSamples;   //real (cosine) reference - default mode
+        private float[] mReferenceI;         //quadrature references
+        private float[] mReferenceQ;
         private float[] mDemodulatedSamples;
         private float[] mCorrelationValues;
         private float mCorrelationAccumulator;
@@ -198,13 +232,30 @@ public class AFSK1200Decoder implements Listener<float[]>
          * @param frequency of the mark or space symbol to test for correlation
          * @param averagingPeriod is the number of correlation values to average each period
          * @param correlationPeriod is the number of samples to correlate each period
+         * @param quadrature true to correlate against quadrature (I/Q) references and use magnitude
+         *      sqrt(I^2+Q^2) (phase-invariant); false for the original single real reference with abs().
          */
-        public Correlator(double sampleRate, double frequency, int averagingPeriod, int correlationPeriod)
+        public Correlator(double sampleRate, double frequency, int averagingPeriod, int correlationPeriod,
+                          boolean quadrature)
         {
             mAveragingBuffer = new FloatAveragingBuffer(averagingPeriod);
+            mQuadrature = quadrature;
 
-            IRealOscillator referenceSignalGenerator = OscillatorFactory.getRealOscillator(frequency, sampleRate);
-            mReferenceSamples = referenceSignalGenerator.generate(correlationPeriod);
+            if(quadrature)
+            {
+                //Quadrature (I/Q) reference so tone detection is phase-invariant: a mark/space tone with an
+                //arbitrary phase relative to the reference still produces its full magnitude. A single real
+                //reference nulls out tones ~90 degrees out of phase, injecting bit errors on marginal bursts.
+                IComplexOscillator generator = OscillatorFactory.getComplexOscillator(frequency, sampleRate);
+                ComplexSamples reference = generator.generateComplexSamples(correlationPeriod, 0L);
+                mReferenceI = reference.i();
+                mReferenceQ = reference.q();
+            }
+            else
+            {
+                IRealOscillator generator = OscillatorFactory.getRealOscillator(frequency, sampleRate);
+                mReferenceSamples = generator.generate(correlationPeriod);
+            }
 
             mDemodulatedSamples = new float[correlationPeriod];
         }
@@ -232,17 +283,35 @@ public class AFSK1200Decoder implements Listener<float[]>
                 System.arraycopy(mDemodulatedSamples, 1, mDemodulatedSamples, 0, mDemodulatedSamples.length - 1);
                 mDemodulatedSamples[mDemodulatedSamples.length - 1] = samples[x];
 
-                mCorrelationAccumulator = 0.0f;
-
-                for(y = 0; y < mDemodulatedSamples.length; y++)
+                if(mQuadrature)
                 {
-                    mCorrelationAccumulator += mDemodulatedSamples[y] * mReferenceSamples[y];
-                }
+                    float iAccumulator = 0.0f;
+                    float qAccumulator = 0.0f;
 
-                //Add the absolute value of correlation accumulator value to the averaging buffer and store the current
-                //average as the correlation value for this sample.  We use absolute value because we don't care if the
-                //signal is out of phase with the reference samples
-                mCorrelationValues[x] = mAveragingBuffer.get(FastMath.abs(mCorrelationAccumulator));
+                    for(y = 0; y < mDemodulatedSamples.length; y++)
+                    {
+                        iAccumulator += mDemodulatedSamples[y] * mReferenceI[y];
+                        qAccumulator += mDemodulatedSamples[y] * mReferenceQ[y];
+                    }
+
+                    //Phase-invariant correlation magnitude sqrt(I^2 + Q^2), averaged over one symbol period.
+                    float magnitude = (float)Math.sqrt((iAccumulator * iAccumulator) + (qAccumulator * qAccumulator));
+                    mCorrelationValues[x] = mAveragingBuffer.get(magnitude);
+                }
+                else
+                {
+                    mCorrelationAccumulator = 0.0f;
+
+                    for(y = 0; y < mDemodulatedSamples.length; y++)
+                    {
+                        mCorrelationAccumulator += mDemodulatedSamples[y] * mReferenceSamples[y];
+                    }
+
+                    //Add the absolute value of correlation accumulator value to the averaging buffer and store the
+                    //current average as the correlation value for this sample.  We use absolute value because we
+                    //don't care if the signal is out of phase with the reference samples
+                    mCorrelationValues[x] = mAveragingBuffer.get(FastMath.abs(mCorrelationAccumulator));
+                }
             }
 
             return mCorrelationValues;
