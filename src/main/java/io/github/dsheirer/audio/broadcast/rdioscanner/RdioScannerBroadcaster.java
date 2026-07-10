@@ -43,7 +43,6 @@ import io.github.dsheirer.identifier.patch.PatchGroup;
 import io.github.dsheirer.identifier.patch.PatchGroupIdentifier;
 import io.github.dsheirer.identifier.radio.RadioIdentifier;
 import io.github.dsheirer.identifier.talkgroup.TalkgroupIdentifier;
-import io.github.dsheirer.protocol.Protocol;
 import io.github.dsheirer.util.ThreadPool;
 import java.io.IOException;
 import java.net.URI;
@@ -421,36 +420,18 @@ public class RdioScannerBroadcaster extends AbstractAudioBroadcaster<RdioScanner
 
         if(!unitHistory.isEmpty())
         {
-            return formatUnitSrc(unitHistory.get(0).radio()).toString();
+            return unitHistory.get(0).radio().getValue().toString();
         }
 
         for(Identifier identifier: audioRecording.getIdentifierCollection().getIdentifiers(Role.FROM))
         {
             if(identifier instanceof RadioIdentifier)
             {
-                return formatUnitSrc((RadioIdentifier)identifier).toString();
+                return ((RadioIdentifier)identifier).getValue().toString();
             }
         }
 
         return "0";
-    }
-
-    /**
-     * Formats a source (FROM) radio unit value for the rdio-scanner upload. MDC-1200 unit IDs are
-     * conventionally 4-digit hexadecimal, so they are sent as an uppercase hex string; all other
-     * protocols keep their numeric (decimal) value so existing digital feeds are unchanged.
-     *
-     * @param radio source unit identifier
-     * @return a hex String for MDC-1200, otherwise the Integer value
-     */
-    private static Object formatUnitSrc(RadioIdentifier radio)
-    {
-        if(radio.getProtocol() == Protocol.MDC1200)
-        {
-            return String.format("%04X", radio.getValue());
-        }
-
-        return radio.getValue();
     }
 
     /**
@@ -489,7 +470,7 @@ public class RdioScannerBroadcaster extends AbstractAudioBroadcaster<RdioScanner
         for(UnitOffset unitOffset: unitHistory)
         {
             Map<String,Object> entry = new LinkedHashMap<>();
-            entry.put("src", formatUnitSrc(unitOffset.radio()));
+            entry.put("src", unitOffset.radio().getValue());
             entry.put("pos", unitOffset.offsetSeconds());
             sources.add(entry);
         }

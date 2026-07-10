@@ -69,29 +69,17 @@ public class RdioScannerUnitsTest
     }
 
     @Test
-    public void serializesMdc1200UnitAsHexSource() throws Exception
+    public void serializesMdc1200UnitAsSource() throws Exception
     {
-        //MDC-1200 unit IDs are radio (source) identifiers sent in 4-digit hex (8004 == 0x1F44).
+        //MDC-1200 unit IDs are radio (source) identifiers, so a leading-edge PTT-ID lands as a call source.
         String json = RdioScannerBroadcaster.buildUnitsJson(
             List.of(new UnitOffset(MDC1200Identifier.createFrom(8004), 0.0)));
 
         JsonNode array = MAPPER.readTree(json);
         assertTrue(array.isArray());
         assertEquals(1, array.size());
-        assertTrue(array.get(0).get("src").isTextual(), "MDC src must be a hex string");
-        assertEquals("1F44", array.get(0).get("src").asText());
-        assertEquals(0.0, array.get(0).get("pos").asDouble(), 0.001);
-    }
-
-    @Test
-    public void nonMdcUnitStaysNumericSource() throws Exception
-    {
-        //P25 (and other digital) units keep their numeric src so existing feeds are unchanged.
-        String json = RdioScannerBroadcaster.buildUnitsJson(List.of(unit(8004, 0.0)));
-
-        JsonNode array = MAPPER.readTree(json);
-        assertTrue(array.get(0).get("src").isNumber(), "digital src must remain numeric");
         assertEquals(8004, array.get(0).get("src").asInt());
+        assertEquals(0.0, array.get(0).get("pos").asDouble(), 0.001);
     }
 
     @Test
