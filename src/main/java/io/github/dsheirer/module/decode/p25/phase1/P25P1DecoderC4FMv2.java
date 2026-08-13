@@ -185,6 +185,11 @@ public class P25P1DecoderC4FMv2 extends FeedbackDecoder implements IByteBufferPr
         mDecimationFilterQ = DecimationFilterFactory.getRealDecimationFilter(decimation);
 
         float decimatedSampleRate = (float)sampleRate / decimation;
+
+        //Set the decimated sample rate to use for PLL error reporting.  Without this the frequency
+        //correction request computed in FeedbackDecoder.processPLLError() is always zero.
+        setDecimatedSampleRate(decimatedSampleRate);
+
         int symbolLength = 16;
         float rrcAlpha = 0.2f;
 

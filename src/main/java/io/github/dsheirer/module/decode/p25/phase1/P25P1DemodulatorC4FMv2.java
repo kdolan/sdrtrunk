@@ -428,7 +428,7 @@ public class P25P1DemodulatorC4FMv2
                             mEqualizer.apply(correctionCandidate);
 
                             //broadcast equalizer balance as the current frequency offset
-                            mFeedbackDecoder.processPLLError(mEqualizer.mPll, SYMBOL_RATE);
+                            mFeedbackDecoder.processPLLError(mEqualizer.mPll);
                         }
 
                         if(correctionCandidate.isValid() || correctionCandidate.hasHighQualityDetectionScore() ||

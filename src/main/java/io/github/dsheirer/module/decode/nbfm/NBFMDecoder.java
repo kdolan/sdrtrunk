@@ -100,9 +100,16 @@ public class NBFMDecoder extends SquelchControlDecoder implements ISourceEventLi
         //Send squelch controlled audio to the resampler and notify the decoder state that the call continues.
         //When CTCSS is configured, only pass audio when the tone is detected.
         mNoiseSquelch.setAudioListener(audio -> {
-            if(mCTCSSDetector == null || mCTCSSDetector.isToneDetected())
+            // if squelch is closing (it hasn't propagated yet to mute the audio)
+            //  call the resampler with lastBatch set to true. This will zero pad the input buffer and ensure
+            //  the output buffer gets emptied.
+            if(mNoiseSquelch.isSquelched())
             {
-                mResampler.resample(audio);
+                mResampler.resample(audio, true);
+            }
+            else if(mCTCSSDetector == null || mCTCSSDetector.isToneDetected())
+            {
+                mResampler.resample(audio);     // this method will set lastBatch to false
                 notifyCallContinuation();
             }
         });

@@ -333,7 +333,7 @@ public class P25P1DemodulatorLSMv2
                 //Message framer returns boolean if valid sync and NID were detected/decoded.
                 if(mMessageFramer.processWithSoftSyncDetect(softSymbol, hardSymbol))
                 {
-                    mFeedbackDecoder.processPLLError(pll, SYMBOL_RATE);
+                    mFeedbackDecoder.processPLLError(pll);
                     mSymbolsSinceLastValidNID = 0;
                     mPLLResetApplied = false;
                     mValidNIDCount++;
