@@ -51,6 +51,15 @@ These are real off-air recordings. Everything that identified a licensee is gone
 What is kept is what the decoder needs: modulation, NAC, and bandwidth. The mapping back to the real
 channels is deliberately not in this repository.
 
+What anonymization does **not** cover, stated plainly rather than pretended away: everything carried
+in the transmission itself survives, because it is the thing under test. NAC values are real — a P25
+decoder cannot lock without the NAC that is actually in the RF. MDC unit IDs appear in
+`baseline/mdc.txt` because they are what the decoder recovered, and they are recoverable from the
+samples by anyone who runs the decoder regardless. The audio payload is real dispatch traffic;
+synthetic signals would not exercise the failure modes these clips were chosen for. Scrubbing the
+file naming keeps the corpus from advertising who it belongs to — it does not make the RF anonymous.
+Treat the corpus as public the moment the repository is.
+
 Note that `corpus-playlist.xml` reproduces each channel's `decode_configuration` attributes verbatim
 so the tuning constants travel with the corpus. `DecodeQualityTest` itself only reads `modulation`,
 `configuredNAC`, and `frequency` from the playlist — the CMA/BCH/DFE values come from harness
