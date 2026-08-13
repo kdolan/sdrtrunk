@@ -1,0 +1,27 @@
+MDC-1200 batch evaluation (threshold=8, false-positive-safe): testdata/baseband
+files: 21
+file                                            sync  valid  op0/1   bursts
+nbfm-mdc-a_01_100000008_baseband.wav               1      1      1   18402/op1/BOT
+nbfm-mdc-a_02_100000008_baseband.wav               2      2      2   18177/op1/BOT,18385/op1/BOT
+nbfm-mdc-b_01_100000009_baseband.wav               4      2      2   22195/op1/BOT,32774/op1/BOT
+nbfm-mdc-b_02_100000009_baseband.wav               6      4      4   20689/op1/BOT,20689/op1/EOT,22195/op1/BOT,32774/op1/BOT
+p25-c4fm-a_01_100000002_baseband.wav               1      0      0   
+p25-c4fm-a_02_100000002_baseband.wav               1      0      0   
+p25-c4fm-a_03_100000002_baseband.wav               2      0      0   
+p25-c4fm-b_01_100000003_baseband.wav               6      0      0   
+p25-c4fm-b_02_100000003_baseband.wav               2      0      0   
+p25-c4fm-b_03_100000003_baseband.wav               3      0      0   
+p25-c4fm-c_01_100000004_baseband.wav               0      0      0   
+p25-c4fm-c_02_100000004_baseband.wav               2      0      0   
+p25-c4fm-d_01_100000005_baseband.wav               3      0      0   
+p25-c4fm-d_02_100000005_baseband.wav               5      0      0   
+p25-c4fm-e_01_100000006_baseband.wav               3      0      0   
+p25-c4fm-e_02_100000006_baseband.wav               1      0      0   
+p25-c4fm-f_01_100000007_baseband.wav               3      0      0   
+p25-lsm-a_01_100000001_baseband.wav                0      0      0   
+p25-lsm-a_02_100000001_baseband.wav                5      0      0   
+p25-lsm-a_03_100000001_baseband.wav                3      0      0   
+p25-lsm-a_04_100000001_baseband.wav                0      0      0   
+----------------------------------------------------------------
+T=8: 4/21 files, 9 CRC-valid bursts (9 op0/1 trusted-real), 53 sync detections
+recurring units (>=2 files, strongly real): 20689x2, 22195x2, 32774x2

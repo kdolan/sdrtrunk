@@ -762,6 +762,32 @@ tasks.register('runMdcBatch', JavaExec) {
 }
 
 /**
+ * Decode regression gate: runs the P25 decode-quality harness and the MDC-1200 batch evaluator over
+ * the committed corpus in testdata/ and fails the build if any gated metric fell below the baseline.
+ * Usage: ./gradlew runRegression [-Pjmbe=path/to/jmbe-1.0.9.jar] [-Pupdate]
+ *   -Pupdate accepts the current results as the new baseline (use only when a change is a verified
+ *   improvement).
+ */
+tasks.register('runRegression', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.dsheirer.regression.RegressionRunner'
+    if(os.isWindows()) {
+        jvmArgs = jvmArgsWindows
+    } else {
+        jvmArgs = jvmArgsLinux
+    }
+    def argsList = []
+    if(project.hasProperty('jmbe')) {
+        argsList.addAll(['--jmbe', project.property('jmbe')])
+    }
+    if(project.hasProperty('update')) {
+        argsList.add('--update')
+    }
+    args = argsList
+}
+
+/**
  * Pipeline replay diagnostic: feeds baseband WAV through the FULL live ProcessingChain
  * (DecoderState, StateMachine, SquelchController, AudioModule) to diagnose live-only bugs.
  * Usage: ./gradlew runPipelineReplay -Psamples=path -Pfreq=154175000 -Pnac=2311 [-Pmod=C4FM] [-Pjmbe=path]
