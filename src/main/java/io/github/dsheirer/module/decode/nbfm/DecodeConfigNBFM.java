@@ -1,6 +1,6 @@
 /*
  * *****************************************************************************
- * Copyright (C) 2014-2025 Dennis Sheirer
+ * Copyright (C) 2014-2026 Dennis Sheirer
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,24 +19,40 @@
 package io.github.dsheirer.module.decode.nbfm;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
 import io.github.dsheirer.dsp.squelch.CTCSSFrequency;
 import io.github.dsheirer.dsp.squelch.NoiseSquelch;
 import io.github.dsheirer.module.decode.DecoderType;
 import io.github.dsheirer.module.decode.analog.DecodeConfigAnalog;
+import io.github.dsheirer.module.decode.squelch.SquelchDecoderConfig;
+import io.github.dsheirer.module.decode.squelch.ctcss.CTCSSCode;
 import io.github.dsheirer.source.tuner.channel.ChannelSpecification;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * Decoder configuration for an NBFM channel
+ * Decoder configuration for an NBFM channel.
+ *
+ * Supports channel-level CTCSS/DCS tone filtering and FM de-emphasis.
  */
 public class DecodeConfigNBFM extends DecodeConfigAnalog
 {
     private boolean mAudioFilter = true;
+    private boolean mAudioALC = false;
     private CTCSSFrequency mCTCSSFrequency = CTCSSFrequency.NONE;
     private float mSquelchNoiseOpenThreshold = NoiseSquelch.DEFAULT_NOISE_OPEN_THRESHOLD;
     private float mSquelchNoiseCloseThreshold = NoiseSquelch.DEFAULT_NOISE_CLOSE_THRESHOLD;
     private int mSquelchHysteresisOpenThreshold = NoiseSquelch.DEFAULT_HYSTERESIS_OPEN_THRESHOLD;
     private int mSquelchHysteresisCloseThreshold = NoiseSquelch.DEFAULT_HYSTERESIS_CLOSE_THRESHOLD;
+
+    // Channel-level squelch filtering
+    private List<SquelchDecoderConfig> mSquelchDecoders = new ArrayList<>();
+
+     // FM de-emphasis
+    private DeemphasisMode mDeemphasis = DeemphasisMode.NONE;
+
 
     /**
      * Constructs an instance
@@ -97,6 +113,25 @@ public class DecodeConfigNBFM extends DecodeConfigAnalog
     }
 
     /**
+     * Indicates if the user wants automatic level control
+     * @return enable status, defaults to false;
+     */
+    @JacksonXmlProperty(isAttribute = true, localName = "audioALC")
+    public boolean isAudioALC()
+    {
+        return mAudioALC;
+    }
+
+    /**
+     * Sets the enabled state of high-pass filtering of the demodulated audio.
+     * @param audioALC set to enabled automatic level control (ALC)
+     */
+    public void setAudioALC(boolean audioALC)
+    {
+        mAudioALC = audioALC;
+    }
+
+    /**
      * CTCSS (PL) tone frequency for tone-gated squelch. When set to a value other than NONE, the squelch will
      * only open when both the noise threshold is met and the specified CTCSS tone is detected.
      * @return configured CTCSS frequency, defaults to NONE (no tone filtering).
@@ -109,11 +144,20 @@ public class DecodeConfigNBFM extends DecodeConfigAnalog
 
     /**
      * Sets the CTCSS (PL) tone frequency for tone-gated squelch.
+     * Also populates upstream's squelch decoders list for backward compatibility.
      * @param ctcssFrequency to require for squelch open, or NONE to disable tone filtering.
      */
     public void setCTCSSFrequency(CTCSSFrequency ctcssFrequency)
     {
         mCTCSSFrequency = (ctcssFrequency != null) ? ctcssFrequency : CTCSSFrequency.NONE;
+        if(mCTCSSFrequency != CTCSSFrequency.NONE && mSquelchDecoders.isEmpty())
+        {
+            CTCSSCode code = CTCSSCode.fromFrequency((float)mCTCSSFrequency.getFrequency());
+            if(code != null && code != CTCSSCode.UNKNOWNL && code != CTCSSCode.UNKNOWNH)
+            {
+                mSquelchDecoders.add(new SquelchDecoderConfig(SquelchDecoderConfig.SquelchType.CTCSS, code.name()));
+            }
+        }
     }
 
     /**
@@ -127,16 +171,6 @@ public class DecodeConfigNBFM extends DecodeConfigAnalog
     }
 
     /**
-     * Squelch noise close threshold in the range 0.0 to 1.0, greater than or equal to open threshold, with a default of 0.2
-     * @return noise close threshold
-     */
-    @JacksonXmlProperty(isAttribute = true, localName = "squelchNoiseCloseThreshold")
-    public float getSquelchNoiseCloseThreshold()
-    {
-        return mSquelchNoiseCloseThreshold;
-    }
-
-    /**
      * Sets the squelch noise threshold.
      * @param open in range 0.0 to 1.0 with a default of 0.1
      */
@@ -146,8 +180,17 @@ public class DecodeConfigNBFM extends DecodeConfigAnalog
         {
             throw new IllegalArgumentException("Squelch noise open threshold is out of range: " + open);
         }
-
         mSquelchNoiseOpenThreshold = open;
+    }
+
+    /**
+     * Squelch noise close threshold in the range 0.0 to 1.0, greater than or equal to open threshold, with a default of 0.2
+     * @return noise close threshold
+     */
+    @JacksonXmlProperty(isAttribute = true, localName = "squelchNoiseCloseThreshold")
+    public float getSquelchNoiseCloseThreshold()
+    {
+        return mSquelchNoiseCloseThreshold;
     }
 
     /**
@@ -160,7 +203,6 @@ public class DecodeConfigNBFM extends DecodeConfigAnalog
         {
             throw new IllegalArgumentException("Squelch noise close threshold is out of range: " + close);
         }
-
         mSquelchNoiseCloseThreshold = close;
     }
 
@@ -184,7 +226,6 @@ public class DecodeConfigNBFM extends DecodeConfigAnalog
         {
             throw new IllegalArgumentException("Squelch hysteresis open threshold is out of range: " + open);
         }
-
         mSquelchHysteresisOpenThreshold = open;
     }
 
@@ -208,7 +249,68 @@ public class DecodeConfigNBFM extends DecodeConfigAnalog
         {
             throw new IllegalArgumentException("Squelch hysteresis close threshold is out of range: " + close);
         }
-
         mSquelchHysteresisCloseThreshold = close;
+    }
+
+     /**
+     * List of CTCSS/DCS squelch decoders for this channel.
+     */
+    @JacksonXmlElementWrapper(localName = "squelchDecoders")
+    @JacksonXmlProperty(localName = "squelchDecoder")
+    public List<SquelchDecoderConfig> getSquelchDecoders()
+    {
+        return mSquelchDecoders;
+    }
+
+    public void setSquelchDecoders(List<SquelchDecoderConfig> squelchDecoders)
+    {
+        mSquelchDecoders = squelchDecoders != null ? squelchDecoders : new ArrayList<>();
+    }
+
+    /**
+     * Adds a squelch decoder to the channel configuration
+     */
+    public void addSquelchDecoder(SquelchDecoderConfig decoder)
+    {
+        if(decoder != null)
+        {
+            mSquelchDecoders.add(decoder);
+        }
+    }
+
+    /**
+     * Removes a squelch filter from the channel configuration
+     */
+    public void removeSquelchDecoder(SquelchDecoderConfig decoder)
+    {
+        mSquelchDecoders.remove(decoder);
+    }
+
+    /**
+     * Indicates if squelch filtering is enabled for this channel
+     */
+    @JsonIgnore
+    public boolean isSquelchDecoderEnabled()
+    {
+        List<SquelchDecoderConfig> decoders = getSquelchDecoders();
+        // TODO right now only looking at first and only decoder, need to fix when multiple decoders are possible
+        return !decoders.isEmpty() && decoders.getFirst().getSquelchType() != SquelchDecoderConfig.SquelchType.NONE;
+    }
+
+    /**
+     * FM de-emphasis mode. Standard FM broadcasting uses pre-emphasis to boost high
+     * frequencies during transmission. De-emphasis restores flat frequency response
+     * during receive, improving audio clarity.
+     * TIA-603-E is the US standard for NBFM de-emphasis.
+     */
+    @JacksonXmlProperty(isAttribute = true, localName = "deemphasis")
+    public DeemphasisMode getDeemphasis()
+    {
+        return mDeemphasis;
+    }
+
+    public void setDeemphasis(DeemphasisMode deemphasis)
+    {
+        mDeemphasis = deemphasis != null ? deemphasis : DeemphasisMode.NONE;
     }
 }

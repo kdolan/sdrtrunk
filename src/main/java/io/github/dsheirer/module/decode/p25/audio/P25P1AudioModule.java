@@ -75,7 +75,6 @@ public class P25P1AudioModule extends ImbeAudioModule
     private boolean mAdaptiveGateDisabled = false;
 
     private SquelchStateListener mSquelchStateListener = new SquelchStateListener();
-    private NonClippingGain mGain = new NonClippingGain(5.0f, 0.95f);
     private List<LDUMessage> mCachedLDUMessages = new ArrayList<>();
 
     public P25P1AudioModule(UserPreferences userPreferences, AliasList aliasList)
@@ -315,11 +314,11 @@ public class P25P1AudioModule extends ImbeAudioModule
                         {
                             faded[i] *= fade;
                         }
-                        addAudio(mGain.apply(faded));
+                        addAudio(faded);
                     }
                     else
                     {
-                        addAudio(mGain.apply(new float[FRAME_SAMPLE_COUNT]));
+                        addAudio(new float[FRAME_SAMPLE_COUNT]);
                     }
                 }
                 return;
@@ -361,11 +360,11 @@ public class P25P1AudioModule extends ImbeAudioModule
                                     repeated[i] *= fade;
                                 }
                             }
-                            addAudio(mGain.apply(repeated));
+                            addAudio(repeated);
                         }
                         else
                         {
-                            addAudio(mGain.apply(new float[FRAME_SAMPLE_COUNT]));
+                            addAudio(new float[FRAME_SAMPLE_COUNT]);
                         }
                         continue;
                     }
@@ -376,7 +375,6 @@ public class P25P1AudioModule extends ImbeAudioModule
 
                 float[] audio = getAudioCodec().getAudio(frame);
                 mLastGoodFrame = audio.clone();
-                audio = mGain.apply(audio);
                 addAudio(audio);
             }
         }

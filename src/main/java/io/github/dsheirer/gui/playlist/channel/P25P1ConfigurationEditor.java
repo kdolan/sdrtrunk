@@ -43,6 +43,7 @@ import javafx.beans.value.ObservableValue;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.scene.control.Label;
+import javafx.scene.control.Slider;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.TitledPane;
@@ -50,6 +51,7 @@ import javafx.scene.control.Toggle;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import org.controlsfx.control.SegmentedButton;
 import org.controlsfx.control.ToggleSwitch;
@@ -97,6 +99,11 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
     private Spinner<Integer> mCmaGearShiftMsSpinner;
     private Label mCmaGearShiftMsLabel;
 
+    // JMBE v2 audio controls
+    private ToggleSwitch mJmbeAGCButton;
+    private Slider mJmbeToneGainSlider;
+    private Slider mJmbeNoiseGainSlider;
+
     /**
      * Constructs an instance
      * @param playlistManager for playlists
@@ -143,28 +150,30 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             gridPane.setHgap(10);
             gridPane.setVgap(10);
 
+            int row = 0;
+
             Label modulationLabel = new Label("Modulation");
             GridPane.setHalignment(modulationLabel, HPos.RIGHT);
-            GridPane.setConstraints(modulationLabel, 0, 0);
+            GridPane.setConstraints(modulationLabel, 0, row);
             gridPane.getChildren().add(modulationLabel);
 
-            GridPane.setConstraints(getModulationSegmentedButton(), 1, 0);
+            GridPane.setConstraints(getModulationSegmentedButton(), 1, row);
             gridPane.getChildren().addAll(getModulationSegmentedButton());
 
             Label poolSizeLabel = new Label("Max Traffic Channels");
             GridPane.setHalignment(poolSizeLabel, HPos.RIGHT);
-            GridPane.setConstraints(poolSizeLabel, 2, 0);
+            GridPane.setConstraints(poolSizeLabel, 2, row);
             gridPane.getChildren().add(poolSizeLabel);
 
-            GridPane.setConstraints(getTrafficChannelPoolSizeSpinner(), 3, 0);
+            GridPane.setConstraints(getTrafficChannelPoolSizeSpinner(), 3, row);
             gridPane.getChildren().add(getTrafficChannelPoolSizeSpinner());
 
-            GridPane.setConstraints(getIgnoreDataCallsButton(), 4, 0);
+            GridPane.setConstraints(getIgnoreDataCallsButton(), 4, row);
             gridPane.getChildren().add(getIgnoreDataCallsButton());
 
             Label directionLabel = new Label("Ignore Data Calls");
             GridPane.setHalignment(directionLabel, HPos.LEFT);
-            GridPane.setConstraints(directionLabel, 5, 0);
+            GridPane.setConstraints(directionLabel, 5, row);
             gridPane.getChildren().add(directionLabel);
 
             // NAC configuration (row 1) - visible for all modulations
@@ -180,26 +189,44 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             GridPane.setConstraints(modulationHelpLabel, 0, 2, 6, 1);
             gridPane.getChildren().add(modulationHelpLabel);
 
-            // LSM v2 options (row 3) - only visible for LSM v2
+            // JMBE Audio controls (row 3)
+            Label jmbeLabel = new Label("AMBE/IMBE Audio");
+            GridPane.setHalignment(jmbeLabel, HPos.LEFT);
+            gridPane.add(jmbeLabel, 0, 3);
+
+            GridPane.setHalignment(getJmbeAGCButton(), HPos.LEFT);
+            gridPane.add(getJmbeAGCButton(), 1, 3);
+
+            gridPane.add(new Label("Tone Volume:"), 2, 3);
+
+            GridPane.setHgrow(getJmbeToneGainSlider(), Priority.ALWAYS);
+            gridPane.add(getJmbeToneGainSlider(), 3, 3);
+
+            gridPane.add(new Label("Comfort Noise Volume:"), 4, 3);
+
+            GridPane.setHgrow(getJmbeNoiseGainSlider(), Priority.ALWAYS);
+            gridPane.add(getJmbeNoiseGainSlider(), 5, 3);
+
+            // LSM v2 options (row 4) - only visible for LSM v2
             mIgnoreEncryptionLabel = new Label("Skip Encryption Check:");
             mIgnoreEncryptionLabel.setTooltip(new Tooltip("Start audio immediately without waiting for encryption status (for known unencrypted channels)"));
             GridPane.setHalignment(mIgnoreEncryptionLabel, HPos.RIGHT);
-            GridPane.setConstraints(mIgnoreEncryptionLabel, 0, 3);
+            GridPane.setConstraints(mIgnoreEncryptionLabel, 0, 4);
             gridPane.getChildren().add(mIgnoreEncryptionLabel);
 
-            GridPane.setConstraints(getIgnoreEncryptionSwitch(), 1, 3);
+            GridPane.setConstraints(getIgnoreEncryptionSwitch(), 1, 4);
             gridPane.getChildren().add(getIgnoreEncryptionSwitch());
 
             mMaxImbeErrorsLabel = new Label("Max IMBE Errors (0=off):");
             mMaxImbeErrorsLabel.setTooltip(new Tooltip("Pre-codec quality gate: frames exceeding this IMBE FEC error threshold are silenced.\n0 = disabled (default). Try 3 for simulcast channels with bimodal error patterns."));
             GridPane.setHalignment(mMaxImbeErrorsLabel, HPos.RIGHT);
-            GridPane.setConstraints(mMaxImbeErrorsLabel, 2, 3, 2, 1);
+            GridPane.setConstraints(mMaxImbeErrorsLabel, 2, 4, 2, 1);
             gridPane.getChildren().add(mMaxImbeErrorsLabel);
 
-            GridPane.setConstraints(getMaxImbeErrorsSpinner(), 4, 3);
+            GridPane.setConstraints(getMaxImbeErrorsSpinner(), 4, 4);
             gridPane.getChildren().add(getMaxImbeErrorsSpinner());
 
-            // BCH threshold (row 4) - only visible for LSM v2
+            // BCH threshold (row 5) - only visible for LSM v2
             mMaxBchErrorsLabel = new Label("BCH Threshold:");
             mMaxBchErrorsLabel.setTooltip(new Tooltip(
                 "BCH error correction threshold for NAC-assisted NID decode.\n" +
@@ -208,13 +235,13 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
                 "1-3 = strict (may miss valid frames)\n" +
                 "Only active when NAC is configured."));
             GridPane.setHalignment(mMaxBchErrorsLabel, HPos.RIGHT);
-            GridPane.setConstraints(mMaxBchErrorsLabel, 0, 4);
+            GridPane.setConstraints(mMaxBchErrorsLabel, 0, 5);
             gridPane.getChildren().add(mMaxBchErrorsLabel);
 
-            GridPane.setConstraints(getMaxBchErrorsSpinner(), 1, 4);
+            GridPane.setConstraints(getMaxBchErrorsSpinner(), 1, 5);
             gridPane.getChildren().add(getMaxBchErrorsSpinner());
 
-            // CMA Acquisition Mu (row 5) - only visible for LSM v2
+            // CMA Acquisition Mu (row 6) - only visible for LSM v2
             mCmaAcquisitionMuLabel = new Label("CMA Acq. Mu:");
             mCmaAcquisitionMuLabel.setTooltip(new Tooltip(
                 "CMA equalizer acquisition step size.\n" +
@@ -223,13 +250,13 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
                 "0.003 = recommended for severe simulcast (LFD, WPD)\n" +
                 "0.001 = conservative (ROC W)"));
             GridPane.setHalignment(mCmaAcquisitionMuLabel, HPos.RIGHT);
-            GridPane.setConstraints(mCmaAcquisitionMuLabel, 0, 5);
+            GridPane.setConstraints(mCmaAcquisitionMuLabel, 0, 6);
             gridPane.getChildren().add(mCmaAcquisitionMuLabel);
 
-            GridPane.setConstraints(getCmaAcquisitionMuSpinner(), 1, 5);
+            GridPane.setConstraints(getCmaAcquisitionMuSpinner(), 1, 6);
             gridPane.getChildren().add(getCmaAcquisitionMuSpinner());
 
-            // CMA Tracking Mu (row 6) - only visible for LSM v2
+            // CMA Tracking Mu (row 7) - only visible for LSM v2
             mCmaTrackingMuLabel = new Label("CMA Trk. Mu:");
             mCmaTrackingMuLabel.setTooltip(new Tooltip(
                 "CMA equalizer tracking step size.\n" +
@@ -237,13 +264,13 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
                 "0.000 = use system default\n" +
                 "0.001 = recommended for all simulcast channels"));
             GridPane.setHalignment(mCmaTrackingMuLabel, HPos.RIGHT);
-            GridPane.setConstraints(mCmaTrackingMuLabel, 0, 6);
+            GridPane.setConstraints(mCmaTrackingMuLabel, 0, 7);
             gridPane.getChildren().add(mCmaTrackingMuLabel);
 
-            GridPane.setConstraints(getCmaTrackingMuSpinner(), 1, 6);
+            GridPane.setConstraints(getCmaTrackingMuSpinner(), 1, 7);
             gridPane.getChildren().add(getCmaTrackingMuSpinner());
 
-            // CMA Gear Shift Ms (row 7) - only visible for LSM v2
+            // CMA Gear Shift Ms (row 8) - only visible for LSM v2
             mCmaGearShiftMsLabel = new Label("CMA Shift (ms):");
             mCmaGearShiftMsLabel.setTooltip(new Tooltip(
                 "Time before equalizer switches from acquisition to tracking mu.\n" +
@@ -251,20 +278,20 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
                 "200 = recommended for simulcast channels\n" +
                 "Set all three CMA values to enable per-channel gear-shifting."));
             GridPane.setHalignment(mCmaGearShiftMsLabel, HPos.RIGHT);
-            GridPane.setConstraints(mCmaGearShiftMsLabel, 0, 7);
+            GridPane.setConstraints(mCmaGearShiftMsLabel, 0, 8);
             gridPane.getChildren().add(mCmaGearShiftMsLabel);
 
-            GridPane.setConstraints(getCmaGearShiftMsSpinner(), 1, 7);
+            GridPane.setConstraints(getCmaGearShiftMsSpinner(), 1, 8);
             gridPane.getChildren().add(getCmaGearShiftMsSpinner());
 
-            // Pipeline diagnostics (row 8) - visible for all modulations
+            // Pipeline diagnostics (row 9) - visible for all modulations
             mPipelineDiagnosticsLabel = new Label("Pipeline Diagnostics:");
             mPipelineDiagnosticsLabel.setTooltip(new Tooltip("Log decode pipeline events to SDRTrunk/logs/p25_logs/ for this channel.\nCaptures messages, state transitions, squelch, and boundary detection."));
             GridPane.setHalignment(mPipelineDiagnosticsLabel, HPos.RIGHT);
-            GridPane.setConstraints(mPipelineDiagnosticsLabel, 0, 8);
+            GridPane.setConstraints(mPipelineDiagnosticsLabel, 0, 9);
             gridPane.getChildren().add(mPipelineDiagnosticsLabel);
 
-            GridPane.setConstraints(getPipelineDiagnosticsSwitch(), 1, 8);
+            GridPane.setConstraints(getPipelineDiagnosticsSwitch(), 1, 9);
             gridPane.getChildren().add(getPipelineDiagnosticsSwitch());
 
             // Update visibility based on modulation selection
@@ -371,6 +398,45 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         }
 
         return mModulationSegmentedButton;
+    }
+
+    public ToggleSwitch getJmbeAGCButton()
+    {
+        if(mJmbeAGCButton == null)
+        {
+            mJmbeAGCButton = new ToggleSwitch("AGC:");
+            mJmbeAGCButton.setTooltip(new Tooltip("Automatic Gain Control to automatically adjust call audio volume"));
+            mJmbeAGCButton.setDisable(true);
+            mJmbeAGCButton.selectedProperty().addListener((o, old, n) -> modifiedProperty().set(true));
+        }
+
+        return mJmbeAGCButton;
+    }
+
+    public Slider getJmbeToneGainSlider()
+    {
+        if(mJmbeToneGainSlider == null)
+        {
+            mJmbeToneGainSlider = new Slider(0.0, 1.0, 1.0);
+            mJmbeToneGainSlider.setTooltip(new Tooltip("Tone generation volume: 0.0 (no tones) to 1.0 (default). Note: Phase 2 AMBE only"));
+            mJmbeToneGainSlider.setDisable(true);
+            mJmbeToneGainSlider.valueProperty().addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));
+        }
+
+        return mJmbeToneGainSlider;
+    }
+
+    public Slider getJmbeNoiseGainSlider()
+    {
+        if(mJmbeNoiseGainSlider == null)
+        {
+            mJmbeNoiseGainSlider = new Slider(0.0, 1.0, 1.0);
+            mJmbeNoiseGainSlider.setTooltip(new Tooltip("Comfort noise insertion volume: 0.0 (no noise) to 1.0 (default)"));
+            mJmbeNoiseGainSlider.setDisable(true);
+            mJmbeNoiseGainSlider.valueProperty().addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));
+        }
+
+        return mJmbeNoiseGainSlider;
     }
 
     private ToggleButton getC4FMToggleButton()
@@ -736,6 +802,12 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
                     break;
             }
             updateLSMv2OptionsVisibility();
+            getJmbeAGCButton().setDisable(false);
+            getJmbeNoiseGainSlider().setDisable(false);
+            getJmbeToneGainSlider().setDisable(false);
+            getJmbeAGCButton().setSelected(decodeConfig.isAGC());
+            getJmbeNoiseGainSlider().setValue(decodeConfig.getNoiseGain());
+            getJmbeToneGainSlider().setValue(decodeConfig.getToneGain());
         }
         else
         {
@@ -749,6 +821,12 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             getCmaTrackingMuSpinner().getValueFactory().setValue(0.0);
             getCmaGearShiftMsSpinner().getValueFactory().setValue(0);
             getPipelineDiagnosticsSwitch().setSelected(false);
+            getJmbeAGCButton().setDisable(true);
+            getJmbeNoiseGainSlider().setDisable(true);
+            getJmbeToneGainSlider().setDisable(true);
+            getJmbeAGCButton().setSelected(false);
+            getJmbeNoiseGainSlider().setValue(0);
+            getJmbeToneGainSlider().setValue(0);
         }
     }
 
@@ -796,6 +874,9 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             config.setModulation(Modulation.CQPSK);
         }
 
+        config.setAGC(getJmbeAGCButton().selectedProperty().getValue());
+        config.setNoiseGain((float)getJmbeNoiseGainSlider().getValue());
+        config.setToneGain((float)getJmbeToneGainSlider().getValue());
         getItem().setDecodeConfiguration(config);
     }
 
