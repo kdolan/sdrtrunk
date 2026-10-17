@@ -55,10 +55,10 @@ plugins {
 //Version is defined in gradle.properties so that we can CLI override it for nightly builds.
 version = project.findProperty('projectVersion')
 
-//Java 26 is required for this version of the Project Panama preview/incubator feature
+//Java 27 is required for this version of the Project Panama preview/incubator feature
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(26)
+        languageVersion = JavaLanguageVersion.of(27)
         vendor = JvmVendorSpec.BELLSOFT
     }
 }
@@ -83,7 +83,7 @@ dependencies {
 
     //mavenCentral/jcenter imports
     implementation 'ch.qos.logback:logback-classic:1.6.3'
-    implementation 'ch.qos.logback:logback-core:1.5.38'
+    implementation 'ch.qos.logback:logback-core:1.6.3'
     implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-xml:2.22.1'
     implementation 'com.fazecast:jSerialComm:2.11.4'
     implementation 'com.formdev:flatlaf:3.7.2'
