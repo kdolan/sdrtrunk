@@ -105,7 +105,7 @@ public class RegressionRunner
             return;
         }
 
-        int regressions = compareDecode() + compareMdc();
+        int regressions = compareDecode(jmbe != null) + compareMdc();
 
         System.out.println();
         if(regressions > 0)
@@ -118,9 +118,10 @@ public class RegressionRunner
 
     /**
      * Compares per-file P25 decode metrics against the baseline.
+     * @param hasJmbe true if JMBE codec was supplied and audio metrics are valid
      * @return count of gated metrics that regressed
      */
-    private static int compareDecode() throws IOException
+    private static int compareDecode(boolean hasJmbe) throws IOException
     {
         Map<String,JsonNode> base = byFile(BASELINE.resolve("metrics.json"));
         Map<String,JsonNode> now = byFile(OUT.resolve("metrics.json"));
@@ -144,6 +145,7 @@ public class RegressionRunner
             for(String key : REPORTED)
             {
                 if(!b.has(key) || !c.has(key)) continue;
+                if(key.equals("audio_seconds") && !hasJmbe) continue;
                 double bv = b.get(key).asDouble(), cv = c.get(key).asDouble();
                 if(bv == cv) continue;
 
