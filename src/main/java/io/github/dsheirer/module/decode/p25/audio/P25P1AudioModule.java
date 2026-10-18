@@ -22,7 +22,7 @@ import io.github.dsheirer.alias.AliasList;
 import io.github.dsheirer.audio.codec.mbe.ImbeAudioModule;
 import io.github.dsheirer.audio.squelch.SquelchState;
 import io.github.dsheirer.audio.squelch.SquelchStateEvent;
-import io.github.dsheirer.dsp.gain.NonClippingGain;
+import io.github.dsheirer.dsp.gain.SoftLimitedGain;
 import io.github.dsheirer.message.IMessage;
 import io.github.dsheirer.module.decode.p25.phase1.message.hdu.HDUMessage;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.IMBEFrameDiagnostic;
@@ -75,6 +75,9 @@ public class P25P1AudioModule extends ImbeAudioModule
     private boolean mAdaptiveGateDisabled = false;
 
     private SquelchStateListener mSquelchStateListener = new SquelchStateListener();
+    // ponytail: fixed +6 dB; upstream #2489 dropped the old 5x hard-clipped gain entirely. Level processing beyond
+    // this belongs on the client so downstream tone detection sees untouched audio.
+    private final SoftLimitedGain mGain = new SoftLimitedGain(2.0f, 0.8f, 0.95f);
     private List<LDUMessage> mCachedLDUMessages = new ArrayList<>();
 
     public P25P1AudioModule(UserPreferences userPreferences, AliasList aliasList)
@@ -126,6 +129,15 @@ public class P25P1AudioModule extends ImbeAudioModule
             mEncryptedCallStateEstablished = true;
             mEncryptedCall = false;
         }
+    }
+
+    /**
+     * Applies the fixed output gain to all audio (decoded, repeated, faded and silence frames) before packaging.
+     */
+    @Override
+    public void addAudio(float[] audioBuffer)
+    {
+        super.addAudio(mGain.apply(audioBuffer));
     }
 
     @Override
