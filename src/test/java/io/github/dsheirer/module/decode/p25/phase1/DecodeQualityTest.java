@@ -337,18 +337,15 @@ public class DecodeQualityTest
                     public String getFramerDiagnosticJson()
                     {
                         var framer = d.getMessageFramer();
-                        var demod = d.getDemodulator();
                         return String.format(
                             ", \"framer_sync_detections\": %d, \"framer_nid_success\": %d, \"framer_nid_fail\": %d" +
                             ", \"framer_sync_blocked\": %d, \"framer_fallback_sync\": %d, \"framer_recovery_sync\": %d" +
                             ", \"framer_initial_acq_sync\": %d, \"framer_flywheel_attempts\": %d" +
-                            ", \"framer_flywheel_success\": %d, \"framer_flywheel_miss\": %d" +
-                            ", \"demod_nid_valid_success\": %d, \"demod_nid_valid_fail\": %d, \"demod_nid_nac_mismatch\": %d",
+                            ", \"framer_flywheel_success\": %d, \"framer_flywheel_miss\": %d",
                             framer.getSyncDetectionCount(), framer.getNIDDecodeSuccessCount(), framer.getNIDDecodeFailCount(),
                             framer.getSyncBlockedCount(), framer.getFallbackSyncCount(), framer.getRecoverySyncCount(),
                             framer.getInitialAcquisitionSyncCount(), framer.getFlywheelAttemptCount(),
-                            framer.getFlywheelSuccessCount(), framer.getFlywheelMissCount(),
-                            demod.getNidValidationSuccess(), demod.getNidValidationFail(), demod.getNidNacMismatch());
+                            framer.getFlywheelSuccessCount(), framer.getFlywheelMissCount());
                     }
                 };
             }

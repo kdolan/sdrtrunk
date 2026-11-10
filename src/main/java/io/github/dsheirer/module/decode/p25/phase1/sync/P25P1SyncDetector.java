@@ -1,6 +1,6 @@
 /*
  * *****************************************************************************
- * Copyright (C) 2014-2025 Dennis Sheirer
+ * Copyright (C) 2014-2026 Dennis Sheirer
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,15 +19,26 @@
 
 package io.github.dsheirer.module.decode.p25.phase1.sync;
 
+import io.github.dsheirer.dsp.c4fm.DibitSyncDetector;
 import io.github.dsheirer.dsp.symbol.Dibit;
 
 /**
  * Base implementation of P25 Phase 1 sync detector.
  */
-public abstract class P25P1SyncDetector
+public abstract class P25P1SyncDetector extends DibitSyncDetector
 {
-    public static final long SYNC_MASK = 0xFFFFFFFFFFFFL;
+    /**
+     * P25 Phase 1 sync pattern: +33333 -3 +33 -33 +33 -3333 +3 -3 +3 -33333
+     */
     public static final long SYNC_PATTERN = 0x5575F5FF77FFL;
+
+    /**
+     * Constructs an instance
+     */
+    public P25P1SyncDetector()
+    {
+        super(SYNC_PATTERN, 24);
+    }
 
     /**
      * Converts the P25P1 sync pattern to a float array of ideal phase values for each Dibit to use for correlation

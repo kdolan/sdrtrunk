@@ -22,6 +22,7 @@
 
 package io.github.dsheirer.gui.playlist.record;
 
+import io.github.dsheirer.gui.control.AccessibleToggleSwitch;
 import io.github.dsheirer.gui.playlist.Editor;
 import io.github.dsheirer.record.RecorderType;
 import io.github.dsheirer.record.config.RecordConfiguration;
@@ -177,6 +178,7 @@ public class RecordConfigurationEditor extends Editor<RecordConfiguration>
             getChildren().add(getToggleSwitch());
 
             Label label = new Label(mRecorderType.getDisplayString());
+            label.setLabelFor(getToggleSwitch());
             GridPane.setHalignment(label, HPos.LEFT);
             GridPane.setConstraints(label, 1, 0);
             getChildren().add(label);
@@ -186,7 +188,7 @@ public class RecordConfigurationEditor extends Editor<RecordConfiguration>
         {
             if(mToggleSwitch == null)
             {
-                mToggleSwitch = new ToggleSwitch();
+                mToggleSwitch = new AccessibleToggleSwitch();
                 mToggleSwitch.setDisable(true);
                 mToggleSwitch.selectedProperty().addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));
             }

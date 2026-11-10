@@ -100,6 +100,8 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
 
     public P25P1DecoderLSMv2()
     {
+        mMessageFramer.setPhaseWrappedSoftSymbols(true);
+        mMessageFramer.mPreemptiveSyncEnabled = false;
         mMessageProcessor.setMessageListener(getMessageListener());
         mDemodulator = new P25P1DemodulatorLSMv2(mMessageFramer, this);
         // Strategy 1: Provide energy state to message framer for adaptive sync threshold
