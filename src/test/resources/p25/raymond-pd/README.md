@@ -1,7 +1,7 @@
 # Raymond PD reference recording
 
 An excerpt of a real SDRTrunk baseband recording of a clean Raymond PD call, with an adjacent P25 system also
-in the recording. `RaymondPDRecordingTest` decodes it with both C4FM decoders and checks the expected results below.
+in the recording. `P25ReferenceRecordingTest` (`raymondPD*`) decodes it with both C4FM decoders and checks the expected results below.
 
 ## Channel
 
@@ -83,7 +83,7 @@ The weak recordings were not committed, because they don't contain intelligible 
 ## Running
 
 ```
-./gradlew test --tests '*RaymondPDRecordingTest'
+./gradlew test --tests '*P25ReferenceRecordingTest'
 ```
 
 The build needs a Bellsoft Liberica JDK 27 **Full** (with JavaFX), for example
