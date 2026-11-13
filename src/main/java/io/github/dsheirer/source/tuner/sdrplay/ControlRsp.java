@@ -30,6 +30,7 @@ import io.github.dsheirer.sdrplay.SDRplay;
 import io.github.dsheirer.sdrplay.SDRplayError;
 import io.github.dsheirer.sdrplay.SDRplayException;
 import io.github.dsheirer.sdrplay.SampleListener;
+import io.github.dsheirer.sdrplay.TransferMode;
 import io.github.dsheirer.sdrplay.Tuner;
 import io.github.dsheirer.util.ThreadPool;
 import java.lang.ref.WeakReference;
@@ -141,6 +142,20 @@ public abstract class ControlRsp<T extends RspDevice> implements IControlRsp
             channel.setIqCorrection(true);
             channel.setIfMode(getIfMode());
             channel.setLoMode(LoMode.AUTO);
+
+            //ponytail: always BULK.  The default isochronous mode made an RSPdxR2 reset itself on USB every 5 min to
+            //14.5 h at 10 MSps, while BULK streamed 8.5+ h without a reset (losing ~0.025% of samples in 0.2 ms gaps).
+            //Make it a per-tuner setting if a tuner ever needs isochronous.  Must be set before streaming starts.
+            try
+            {
+                device.setTransferMode(TransferMode.BULK);
+                mLog.info("Transfer mode for " + mDeviceInfo + " set to [" + device.transferMode() + "]");
+            }
+            catch(RuntimeException re)
+            {
+                //An RSPduo in slave mode has no device parameters, so the master's transfer mode applies
+                mLog.warn("Unable to set BULK transfer mode for " + mDeviceInfo + " - " + re.getMessage());
+            }
 
             mSession = session;
             mDevice = mDeviceClass.cast(device);
