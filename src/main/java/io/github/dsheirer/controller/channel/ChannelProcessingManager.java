@@ -48,6 +48,7 @@ import io.github.dsheirer.source.SourceEvent;
 import io.github.dsheirer.source.SourceException;
 import io.github.dsheirer.source.config.SourceConfigTuner;
 import io.github.dsheirer.source.config.SourceConfigTunerMultipleFrequency;
+import io.github.dsheirer.source.tuner.channel.MultiFrequencyTunerChannelSource;
 import io.github.dsheirer.source.tuner.channel.TunerChannelSource;
 import io.github.dsheirer.source.tuner.manager.TunerManager;
 import io.github.dsheirer.source.tuner.manager.TunerReconnectedNotification;
@@ -216,7 +217,11 @@ public class ChannelProcessingManager implements Listener<ChannelEvent>
         {
             for(Map.Entry<Channel,ProcessingChain> entry : mProcessingChainsMap.entrySet())
             {
-                if(entry.getValue().hasSource(tunerChannelSource))
+                ProcessingChain chain = entry.getValue();
+
+                //A multi-frequency channel's chain holds a wrapper around the tuner channel source
+                if(chain.hasSource(tunerChannelSource) || (chain.getSource() instanceof MultiFrequencyTunerChannelSource
+                    multi && multi.isWrapping(tunerChannelSource)))
                 {
                     channel = entry.getKey();
                     break;
@@ -372,6 +377,7 @@ public class ChannelProcessingManager implements Listener<ChannelEvent>
             if(!channel.isTrafficChannel())
             {
                 mTunerStoppedChannels.put(channel, System.currentTimeMillis());
+                mLog.info("Channel [" + channel.getName() + "] stopped by its tuner - it restarts if the tuner reconnects");
             }
 
             try
@@ -402,7 +408,14 @@ public class ChannelProcessingManager implements Listener<ChannelEvent>
     @Subscribe
     public void tunerReconnected(TunerReconnectedNotification notification)
     {
-        for(Channel channel: takeStoppedAt(mTunerStoppedChannels, notification.removedTimestamp()))
+        List<Channel> channels = takeStoppedAt(mTunerStoppedChannels, notification.removedTimestamp());
+
+        if(channels.isEmpty())
+        {
+            mLog.info("Tuner [" + notification.tunerId() + "] reconnected - no channels were stopped by its removal");
+        }
+
+        for(Channel channel: channels)
         {
             mLog.info("Restarting channel [" + channel.getName() + "] after tuner [" + notification.tunerId() +
                 "] reconnected");

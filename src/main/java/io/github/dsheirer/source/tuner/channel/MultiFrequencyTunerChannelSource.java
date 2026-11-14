@@ -74,6 +74,17 @@ public class MultiFrequencyTunerChannelSource extends TunerChannelSource
     }
 
     /**
+     * Indicates if this source currently wraps the tuner channel source, so that a request about the tuner channel
+     * source (ie stop when its tuner stops) can be matched to the channel that uses this source.
+     * @param tunerChannelSource to check
+     * @return true if it's the currently wrapped source
+     */
+    public boolean isWrapping(TunerChannelSource tunerChannelSource)
+    {
+        return tunerChannelSource != null && mTunerChannelSource == tunerChannelSource;
+    }
+
+    /**
      * Applies the channel decoder requested frequency correction.
      * @param correction requested by the downstream processors.
      */
