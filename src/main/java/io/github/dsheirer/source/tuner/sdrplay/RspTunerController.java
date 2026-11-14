@@ -308,6 +308,16 @@ public abstract class RspTunerController<I extends IControlRsp> extends TunerCon
     }
 
     /**
+     * Test aid: simulates a USB dropout by sending this controller the same device removal event that the SDRplay API
+     * sends when the device resets, so that removal, reconnect and channel restart can be checked on demand.
+     */
+    public void simulateDeviceRemoval()
+    {
+        mLog.info("Simulating USB dropout for tuner [" + getSdrplayTuner() + "]");
+        onEvent(new DeviceEvent.DeviceRemoved(getSdrplayTuner()));
+    }
+
+    /**
      * Processes a device removal (or failure) event.
      * @param tuner that was removed
      */

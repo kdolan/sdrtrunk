@@ -21,6 +21,7 @@ package io.github.dsheirer.source.tuner.sdrplay;
 
 import io.github.dsheirer.preference.UserPreferences;
 import io.github.dsheirer.source.tuner.manager.TunerManager;
+import io.github.dsheirer.sdrplay.RspModel;
 import io.github.dsheirer.sdrplay.Tuner;
 import io.github.dsheirer.source.tuner.ui.TunerEditor;
 import io.github.dsheirer.util.ThreadPool;
@@ -53,6 +54,7 @@ public abstract class RspTunerEditor<C extends RspTunerConfiguration> extends Tu
     private IfGainSlider mIfGainSlider;
     private JButton mGainOverloadButton;
     private JPanel mGainPanel;
+    private JButton mSimulateDropoutButton;
     private AtomicBoolean mGainOverloadAlert = new AtomicBoolean();
 
     /**
@@ -64,6 +66,45 @@ public abstract class RspTunerEditor<C extends RspTunerConfiguration> extends Tu
     public RspTunerEditor(UserPreferences userPreferences, TunerManager tunerManager, DiscoveredRspTuner discoveredTuner)
     {
         super(userPreferences, tunerManager, discoveredTuner);
+
+        //RSPduo tuners aren't reconnected after a dropout, so there's nothing to test for them
+        if(discoveredTuner.getModel() != RspModel.RSPDUO)
+        {
+            getButtonPanel().add(getSimulateDropoutButton(), "newline,span,align left");
+        }
+    }
+
+    /**
+     * Test button that drops the tuner as if its USB connection reset, to check reconnect and channel restart.
+     */
+    private JButton getSimulateDropoutButton()
+    {
+        if(mSimulateDropoutButton == null)
+        {
+            mSimulateDropoutButton = new JButton("Simulate USB Dropout");
+            mSimulateDropoutButton.setToolTipText("Test: drop this tuner as if its USB connection reset.  Its " +
+                "channels stop, the tuner reconnects within about 5 seconds and the channels restart.");
+            mSimulateDropoutButton.addActionListener(e ->
+            {
+                if(!hasTuner())
+                {
+                    return;
+                }
+
+                int choice = JOptionPane.showConfirmDialog(RspTunerEditor.this,
+                    "Drop " + getDiscoveredTuner().getId() + " as if its USB connection reset?\n\n" +
+                    "Its channels stop now.  SDRTrunk should reconnect the tuner within about 5 seconds\n" +
+                    "and restart those channels.  Check the application log for the result.",
+                    "Simulate USB Dropout", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+
+                if(choice == JOptionPane.OK_OPTION && hasTuner())
+                {
+                    getTunerController().simulateDeviceRemoval();
+                }
+            });
+        }
+
+        return mSimulateDropoutButton;
     }
 
     private RspTunerController getTunerController()

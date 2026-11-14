@@ -50,6 +50,7 @@ import io.github.dsheirer.source.config.SourceConfigTuner;
 import io.github.dsheirer.source.config.SourceConfigTunerMultipleFrequency;
 import io.github.dsheirer.source.tuner.channel.TunerChannelSource;
 import io.github.dsheirer.source.tuner.manager.TunerManager;
+import io.github.dsheirer.source.tuner.manager.TunerReconnectedNotification;
 import io.github.dsheirer.util.ThreadPool;
 import java.awt.GraphicsEnvironment;
 import java.util.ArrayList;
@@ -93,6 +94,10 @@ public class ChannelProcessingManager implements Listener<ChannelEvent>
     private UserPreferences mUserPreferences;
     private List<Long> mLoggedFrequencies = new ArrayList<>();
     private List<ScheduledFuture<?>> mDelayedChannelStartTasks = new ArrayList<>();
+    //Channels stopped because their tuner stopped, with the time they stopped, so they can restart if it reconnects
+    private final Map<Channel,Long> mTunerStoppedChannels = new ConcurrentHashMap<>();
+    //A removed tuner's channels stop within milliseconds of the removal, before or after it depending on listener order
+    static final long TUNER_STOP_WINDOW_MS = 2000;
 
     /**
      * Constructs the channel processing manager
@@ -236,6 +241,13 @@ public class ChannelProcessingManager implements Listener<ChannelEvent>
     {
         Channel channel = event.getChannel();
 
+        //A channel the user starts, stops or deletes is no longer waiting for its tuner to reconnect
+        if(channel != null && (event.getEvent() == ChannelEvent.Event.REQUEST_ENABLE ||
+            event.getEvent() == ChannelEvent.Event.REQUEST_DISABLE || event.getEvent() == ChannelEvent.Event.NOTIFICATION_DELETE))
+        {
+            mTunerStoppedChannels.remove(channel);
+        }
+
         switch(event.getEvent())
         {
             case REQUEST_ENABLE:
@@ -355,6 +367,13 @@ public class ChannelProcessingManager implements Listener<ChannelEvent>
 
         if(channel != null)
         {
+            //Only the tuner's channel manager sends this request, when the tuner stops.  Traffic channels aren't
+            //remembered, because their control channel creates them again.
+            if(!channel.isTrafficChannel())
+            {
+                mTunerStoppedChannels.put(channel, System.currentTimeMillis());
+            }
+
             try
             {
                 stop(channel);
@@ -373,6 +392,59 @@ public class ChannelProcessingManager implements Listener<ChannelEvent>
     public void stop(Channel channel) throws ChannelException
     {
         stopProcessing(channel);
+    }
+
+    /**
+     * Restarts the channels that stopped when a tuner was removed, once that tuner reconnects.  Each channel starts
+     * the normal way, so it uses its preferred tuner when that tuner is available.
+     * @param notification that a removed tuner reconnected
+     */
+    @Subscribe
+    public void tunerReconnected(TunerReconnectedNotification notification)
+    {
+        for(Channel channel: takeStoppedAt(mTunerStoppedChannels, notification.removedTimestamp()))
+        {
+            mLog.info("Restarting channel [" + channel.getName() + "] after tuner [" + notification.tunerId() +
+                "] reconnected");
+
+            try
+            {
+                start(channel);
+            }
+            catch(ChannelException ce)
+            {
+                mLog.warn("Unable to restart channel [" + channel.getName() + "] - " + ce.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Removes and returns the entries that stopped when a tuner was removed: within TUNER_STOP_WINDOW_MS of the
+     * removal time.  Also discards entries older than that, so the map doesn't keep channels that never restart.
+     * @param stopped entries with the time each stopped
+     * @param removedTimestamp when the tuner was removed
+     * @return entries that stopped with the tuner
+     */
+    static <T> List<T> takeStoppedAt(Map<T,Long> stopped, long removedTimestamp)
+    {
+        List<T> matches = new ArrayList<>();
+
+        for(Map.Entry<T,Long> entry: new ArrayList<>(stopped.entrySet()))
+        {
+            long time = entry.getValue();
+
+            if(Math.abs(time - removedTimestamp) <= TUNER_STOP_WINDOW_MS)
+            {
+                matches.add(entry.getKey());
+                stopped.remove(entry.getKey());
+            }
+            else if(time < removedTimestamp - TUNER_STOP_WINDOW_MS)
+            {
+                stopped.remove(entry.getKey());
+            }
+        }
+
+        return matches;
     }
 
     /**

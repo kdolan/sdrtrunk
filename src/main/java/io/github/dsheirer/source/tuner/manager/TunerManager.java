@@ -27,9 +27,11 @@ import io.github.dsheirer.libusb.UsbException;
 import io.github.dsheirer.libusb.UsbHotplug;
 import io.github.dsheirer.libusb.UsbHotplugListener;
 import io.github.dsheirer.libusb.UsbLogLevel;
+import io.github.dsheirer.eventbus.MyEventBus;
 import io.github.dsheirer.preference.UserPreferences;
 import io.github.dsheirer.preference.source.ChannelizerType;
 import io.github.dsheirer.sdrplay.DeviceInfo;
+import io.github.dsheirer.sdrplay.RspModel;
 import io.github.dsheirer.sdrplay.SDRplay;
 import io.github.dsheirer.sdrplay.SDRplayException;
 import io.github.dsheirer.source.Source;
@@ -78,6 +80,9 @@ public class TunerManager implements IDiscoveredTunerStatusListener
     private final HotplugEventSupport mHotplugEventSupport = new HotplugEventSupport();
     private boolean mLibUsbAvailable = false;
     private SDRplay mSDRplay;
+    private volatile boolean mStopping = false;
+    private static final int RSP_RECONNECT_INTERVAL_SECONDS = 5;
+    private static final int RSP_RECONNECT_ATTEMPTS = 60; //5 minutes
 
     /**
      * Constructs an instance
@@ -144,6 +149,9 @@ public class TunerManager implements IDiscoveredTunerStatusListener
      */
     public void stop()
     {
+        //Cancel any pending RSP reconnect so that no tuner is re-added during shutdown
+        mStopping = true;
+
         //Stop hotplug detection first so that no tuner is added or removed while the tuners are released
         mHotplugEventSupport.stop();
 
@@ -411,6 +419,113 @@ public class TunerManager implements IDiscoveredTunerStatusListener
     }
 
     /**
+     * Schedules an attempt to reconnect a removed RSP tuner, which reschedules itself until the tuner is found or the
+     * attempts run out.
+     * @param id of the removed tuner
+     * @param serialNumber of the removed RSP device
+     * @param removedTimestamp when the tuner was removed
+     * @param attempt number of this attempt, starting at 1
+     */
+    private void scheduleRspReconnect(String id, String serialNumber, long removedTimestamp, int attempt)
+    {
+        ThreadPool.SCHEDULED.schedule(() ->
+        {
+            if(mStopping)
+            {
+                return;
+            }
+
+            boolean done = false;
+
+            try
+            {
+                done = reconnectRsp(id, serialNumber, removedTimestamp);
+            }
+            catch(Throwable t)
+            {
+                mLog.warn("Tuner: " + id + " - reconnect attempt " + attempt + " failed - " + t.getMessage());
+            }
+
+            if(!done)
+            {
+                if(attempt < RSP_RECONNECT_ATTEMPTS)
+                {
+                    scheduleRspReconnect(id, serialNumber, removedTimestamp, attempt + 1);
+                }
+                else
+                {
+                    mLog.warn("Tuner: " + id + " - not found after " + attempt + " reconnect attempts.  Restart " +
+                        "sdrtrunk once the radio is available again.");
+                }
+            }
+        }, RSP_RECONNECT_INTERVAL_SECONDS, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Looks for a removed RSP tuner in the SDRplay API and re-adds it when it's available again.
+     * @param id of the removed tuner
+     * @param serialNumber of the removed RSP device
+     * @param removedTimestamp when the tuner was removed
+     * @return true when no further attempts are needed
+     * @throws SDRplayException if the API can't be queried
+     */
+    private boolean reconnectRsp(String id, String serialNumber, long removedTimestamp) throws SDRplayException
+    {
+        //Wait until the removed tuner is gone from the model so that its replacement doesn't collide with it
+        if(mDiscoveredTunerModel.getDiscoveredTuner(id) != null)
+        {
+            return false;
+        }
+
+        DeviceInfo deviceInfo = null;
+
+        try(SDRplay session = SDRplay.open())
+        {
+            for(DeviceInfo info: session.devices())
+            {
+                if(info.serialNumber().equals(serialNumber))
+                {
+                    deviceInfo = info;
+                    break;
+                }
+            }
+        }
+
+        if(deviceInfo == null)
+        {
+            return false;
+        }
+
+        ChannelizerType channelizerType = mUserPreferences.getTunerPreference().getChannelizerType();
+        RspDuoSelectionMode duoSelectionMode = mUserPreferences.getTunerPreference().getRspDuoTunerMode();
+
+        for(DiscoveredRspTuner tuner: TunerFactory.getRspTuners(deviceInfo, channelizerType, duoSelectionMode))
+        {
+            startAndConfigureTuner(tuner);
+
+            if(!tuner.isEnabled())
+            {
+                //The user disabled this tuner, so there's nothing to restart
+                return true;
+            }
+
+            if(!tuner.isAvailable() || !tuner.hasTuner())
+            {
+                //The radio is listed but not ready yet.  Remove the failed tuner so the next attempt starts fresh.
+                mLog.info("Tuner: " + id + " - found but didn't start (" + tuner.getErrorMessage() + ").  Retrying.");
+                mDiscoveredTunerModel.removeDiscoveredTuner(tuner);
+                tuner.stop();
+                return false;
+            }
+        }
+
+        mLog.info("Tuner: " + id + " - reconnected after " +
+            ((System.currentTimeMillis() - removedTimestamp) / 1000) + " seconds.  Restarting its channels.");
+        MyEventBus.getGlobalEventBus().post(new TunerReconnectedNotification(id, removedTimestamp));
+        return true;
+    }
+
+    /**
      * Discover recording based tuners
      */
     private void discoverRecordingTuners()
@@ -452,6 +567,18 @@ public class TunerManager implements IDiscoveredTunerStatusListener
         if(current == TunerStatus.ENABLED)
         {
             discoveredTuner.start();
+        }
+
+        //An RSP that resets on USB is usable again within seconds, but the API only reports it as removed.
+        //ponytail: RSPduo is excluded because its master and slave tuners are removed and re-added as a pair.
+        //ponytail: no cap on repeat reconnects.  A radio that fails every time it starts streaming cycles every ~5 s
+        //until the daily restart.  Add a per-serial reconnect limit if that ever shows up in the logs.
+        if(current == TunerStatus.REMOVED && !mStopping && discoveredTuner instanceof DiscoveredRspTuner<?> rsp &&
+           rsp.getModel() != RspModel.RSPDUO)
+        {
+            mLog.info("Tuner: " + rsp + " - removed.  Trying to reconnect every " + RSP_RECONNECT_INTERVAL_SECONDS +
+                " seconds for up to " + (RSP_RECONNECT_INTERVAL_SECONDS * RSP_RECONNECT_ATTEMPTS / 60) + " minutes");
+            scheduleRspReconnect(rsp.getId(), rsp.getDeviceInfo().serialNumber(), System.currentTimeMillis(), 1);
         }
 
         //Special handling for RSPduo to auto-update enabled state for slave device when configured for master/slave operation
