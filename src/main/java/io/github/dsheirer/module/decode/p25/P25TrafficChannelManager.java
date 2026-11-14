@@ -1644,9 +1644,16 @@ public class P25TrafficChannelManager extends TrafficChannelManager implements I
     {
         List<Channel> channels = new ArrayList<>(mAllocatedTrafficChannelMap.values());
 
-        //Issue a disable request for each traffic channel
+        //Issue a disable request for each traffic channel.  The map also holds the parent control channel under its
+        //own frequency.  It's already stopping, and a disable request for it would look like the user stopped it,
+        //so it wouldn't restart when its tuner reconnects.
         for(Channel channel: channels)
         {
+            if(channel.equals(mParentChannel))
+            {
+                continue;
+            }
+
             mLog.info("Stopping traffic channel: " + channel);
             broadcast(new ChannelEvent(channel, Event.REQUEST_DISABLE));
         }
