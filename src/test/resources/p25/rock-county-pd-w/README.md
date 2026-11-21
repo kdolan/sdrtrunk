@@ -116,7 +116,7 @@ decoded by CQPSK (`P25P1DecoderLSM`) on master `635888d1` with no frequency shif
 
 `P25ReferenceRecordingTest.rockCountyPDWCollectionCQPSK` checks a floor of about 90% of these LDU counts, and at most 2
 "encrypted" LDU2s and 2 foreign-NAC messages (bit-error artifacts), for every recording except the two signalling bursts
-and the off-frequency ones.
+and the off-frequency ones. `P25P1LSMFrequencyAmbiguityTest` uses the off-frequency recordings.
 
 **Short bursts with no voice.** `short_20261116_090436` and `short_20261117_065750` decode 0 LDUs because they carry
 no voice. They're signalling bursts, and the bench decoder (CQPSK) matches what the live system logged for each:
@@ -126,9 +126,9 @@ no voice. They're signalling bursts, and the bench decoder (CQPSK) matches what 
 | `short_20261116_090436` | 141 TDU, 1 AcknowledgeResponse, 1 DenyResponse | about 105 TDUs from 09:04:36 to :38; voice from 80003 follows at 09:04:49, after the cut |
 | `short_20261117_065750` | 275 TDU, 1 AcknowledgeResponse, 1 DenyResponse, 1 UnknownOSP, 1 invalid TDULC, 1 DroppedSamples | `ACK_RESPONSE_FNE FM:16777212 TO:866521 ACKNOWLEDGING:EMRG_ALRM_REQ`, `DENY_RESPONSE TO:866521 SERVICE:GRP_V_REQ`, about 270 TDUs, `RESERVED_23` OSP, a TDULC CRC failure and a dropped-samples event; voice from 80001 at 06:58:05 |
 
-The `065750` burst is an emergency alarm from unit 866521 being acknowledged by the system. The test doesn't check
-either recording. `short/logs/` holds the live logs from 60 s before to 75 s after each recording started: the
-channel's decoded messages, its call events, and the application log lines for this channel plus any WARN or ERROR.
+The `065750` burst is an emergency alarm from unit 866521 being acknowledged by the system.
+`P25ReferenceRecordingTest.rockCountyPDWSignallingBursts` checks both bench decodes, and its Javadoc quotes the
+relevant lines from the live decoded-message and call-event logs.
 
 ### Off-frequency: the 2026-11-21 outage and the CQPSK 4800 Hz false lock
 
@@ -149,6 +149,16 @@ Offsets close to ±4.8 kHz are pulled toward it (e.g. −4200 Hz requests −656
 channel frequency loop has stable false locks at ±4.8 kHz. A CQPSK channel in that false lock keeps decoding, and auto
 PPM averages its corrections into the tuner. C4FM channels on the same tuner stop decoding beyond about ±2 kHz, and
 they only report a frequency error after a valid sync, so they can't pull the tuner back.
+
+**Fix (2026-11-21).** `DQPSKDifferentialDemodulator` keeps a wide-range carrier offset estimate: a power-weighted
+average of the sample-to-sample phase change, unambiguous to ±half the sample rate. `P25P1DecoderLSM` moves its
+reported offset by whatever multiple of 4800 Hz brings it nearest to that estimate. Simulcast tilt and noise move the
+estimate by far less than 2400 Hz, so centred signals are unchanged. The ambiguity search also gains a ±2400 Hz step
+(+2 and −2 are the same to the demodulator), which closes the 1.8 to 3.0 kHz dead zone where CQPSK never synchronized.
+With the fix, the 2026-11-20 12:00:16 recording decodes at every shift from −6 to +6 kHz (84 to 108 LDUs) and requests
+within 6% of the true correction. A closed loop that starts 4800 Hz off walks back to centre and keeps decoding.
+`P25P1LSMFrequencyAmbiguityTest` covers this. Four of its five tests fail on the previous code, and the closed loop
+there stays at +4902 Hz.
 
 Open-loop frequency error requested by each decoder, from the reference recordings (a signal at +X Hz needs about −X):
 

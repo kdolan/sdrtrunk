@@ -266,8 +266,9 @@ public class DQPSKDifferentialDemodulatorTest
             verified.offsetVerified();
         }
 
-        //Unsynchronized for ~10,000 symbols: longer than the search dwell and shorter than the verified dwell
-        for(int buffer = 0; buffer < 50; buffer++)
+        //Unsynchronized for ~5,100 symbols: two search dwells (so the four step search is mid-cycle) and much shorter
+        //than the verified dwell
+        for(int buffer = 0; buffer < 25; buffer++)
         {
             float[][] samples = generatorUnverified.next(completed);
             unverified.demodulate(samples[0], samples[1], false);
@@ -275,7 +276,7 @@ public class DQPSKDifferentialDemodulatorTest
             verified.demodulate(samples[0], samples[1], false);
         }
 
-        //The unverified search steps to an adjacent (1200 Hz) offset range while the verified search holds its range
+        //The unverified search steps to another offset range while the verified search holds its range
         double difference = Math.abs(toHertz(unverified.getFrequencyOffset()) - toHertz(verified.getFrequencyOffset()));
         assertTrue(difference > 600, "Unverified offset range search stepped away [" + difference + " Hz]");
     }

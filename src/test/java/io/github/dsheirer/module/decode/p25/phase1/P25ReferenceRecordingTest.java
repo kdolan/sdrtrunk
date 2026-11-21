@@ -70,6 +70,8 @@ public class P25ReferenceRecordingTest
         int encryptedLdu2;
         int foreignNac;
         int garbageLdu = -1; //-1 when JMBE isn't available
+        //Valid messages by class name, ie TDUMessage or AcknowledgeResponse
+        java.util.Map<String,Integer> types = new java.util.TreeMap<>();
 
         @Override
         public String toString()
@@ -198,6 +200,11 @@ public class P25ReferenceRecordingTest
         }
 
         Listener<IMessage> listener = message -> {
+            if(message.isValid())
+            {
+                result.types.merge(message.getClass().getSimpleName(), 1, Integer::sum);
+            }
+
             if(message instanceof P25P1Message p25 && p25.isValid())
             {
                 Identifier messageNac = p25.getNAC();
@@ -286,7 +293,8 @@ public class P25ReferenceRecordingTest
     /**
      * Rock County PD W collection (2026-11-12 to 2026-11-19, ~29 dB, centred): long keyups, short bursts and rapid
      * back-and-forth exchanges.  Each floor is ~90% of the valid LDUs CQPSK decoded on 2026-11-21.  The two short
-     * signalling bursts (TDUs and TSBKs, no voice) and the off-frequency recordings are documented in the README only.
+     * signalling bursts (TDUs and TSBKs, no voice) are tested by rockCountyPDWSignallingBursts, and the off-frequency
+     * recordings by P25P1LSMFrequencyAmbiguityTest.
      */
     private static final String[][] ROCK_COUNTY_PD_W_COLLECTION = {
         {"long/long_20261112_130208_2.5-37.5s_154815000_baseband.wav", "172"},
@@ -329,6 +337,45 @@ public class P25ReferenceRecordingTest
         }
 
         assertTrue(failures.isEmpty(), "Collection decode regressions:" + failures);
+    }
+
+    /**
+     * Rock County PD W short signalling bursts with no voice, decoded the same as the live system (CQPSK).  Live log
+     * cross-section for each (decoded message log, consecutive identical lines counted):
+     *
+     * short_20261116_090436 (2026-11-16 09:04:36):
+     * <pre>
+     *   090436-090438  ~105x PASSED NAC:279/x117 TDU
+     *   090449         voice resumes: HDU TALKGROUP:1, then LDU1 FM:80003 TO:1 (after this excerpt)
+     * </pre>
+     *
+     * short_20261117_065750 (2026-11-17 06:57:50), an emergency alarm from unit 866521 acknowledged by the system:
+     * <pre>
+     *   065750  PASSED TSBK1 DENY_RESPONSE TO:866521 SERVICE:GRP_V_REQ REASON:RESERVED
+     *   065750  PASSED TSBK1 ACK_RESPONSE_FNE FM:16777212 TO:866521 ACKNOWLEDGING:EMRG_ALRM_REQ
+     *   065751  FAILED NAC:1116/x45C TDULC ***LINK CONTROL CRC FAIL***
+     *   065751  PASSED DROPPED SAMPLES (POSSIBLY) DETECTED -- COULD NOT ACCOUNT FOR [2] SYMBOL BITS
+     *   065753  PASSED TSBK1 RESERVED_23 **UNRECOGNIZED OSP OPCODE: 35
+     *   065750-065755  ~270x PASSED NAC:279/x117 TDU
+     *   065805  voice resumes: HDU TALKGROUP:1, then LDU1 FM:80001 TO:1 (after this excerpt)
+     * call events: 06:57:50 Response DENY: GROUP VOICE SERVICE REQUEST (866521)
+     *              06:57:50 Response 16777212 -> (866521) ACKNOWLEDGE EMERGENCY ALARM REQUEST
+     * </pre>
+     */
+    @Test
+    public void rockCountyPDWSignallingBursts() throws Exception
+    {
+        Result tdus = decode("/p25/rock-county-pd-w/short/short_20261116_090436_2.9-6.8s_154815000_baseband.wav",
+                ROCK_COUNTY_PD_W_NAC, P25ReferenceRecordingTest::cqpsk);
+        assertEquals(0, tdus.validLdu, "No voice: " + tdus.types);
+        assertTrue(tdus.types.getOrDefault("TDUMessage", 0) >= 120, "TDU burst (141 on 2026-11-21): " + tdus.types);
+
+        Result alarm = decode("/p25/rock-county-pd-w/short/short_20261117_065750_3.0-9.5s_154815000_baseband.wav",
+                ROCK_COUNTY_PD_W_NAC, P25ReferenceRecordingTest::cqpsk);
+        assertEquals(0, alarm.validLdu, "No voice: " + alarm.types);
+        assertTrue(alarm.types.getOrDefault("TDUMessage", 0) >= 245, "TDU burst (275 on 2026-11-21): " + alarm.types);
+        assertEquals(1, alarm.types.getOrDefault("AcknowledgeResponse", 0), "Emergency alarm ACK: " + alarm.types);
+        assertEquals(1, alarm.types.getOrDefault("DenyResponse", 0), "Group voice request DENY: " + alarm.types);
     }
 
     /**

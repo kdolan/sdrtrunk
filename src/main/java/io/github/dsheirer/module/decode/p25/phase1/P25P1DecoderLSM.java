@@ -190,13 +190,20 @@ public class P25P1DecoderLSM extends FeedbackDecoder implements IByteBufferProvi
      * Includes the coarse carrier offset that the differential demodulator removes ahead of the symbol processor,
      * since the symbol processor's PLL error only represents the residual offset.  The symbol processor invokes this
      * method when the message framer decodes a valid NID, which also verifies the demodulator's carrier offset range.
+     *
+     * The differential demodulator can't distinguish carrier offsets a multiple of the symbol rate apart, so the
+     * offset is resolved against the demodulator's wide range estimate before it is reported.  Otherwise a signal
+     * 4800 Hz off centre reports no error and the frequency correction loops hold it there (see
+     * DQPSKDifferentialDemodulator.resolveSymbolRateAmbiguity()).
      * @param pllError residual carrier offset (radians per sample) from the symbol processor
      */
     @Override
     public void processPLLError(float pllError)
     {
         mDemodulator.offsetVerified();
-        super.processPLLError(pllError - mDemodulator.getFrequencyOffset());
+        //The correction request is the negative of the carrier offset
+        float carrierOffset = mDemodulator.resolveSymbolRateAmbiguity(mDemodulator.getFrequencyOffset() - pllError);
+        super.processPLLError(-carrierOffset);
     }
 
     /**

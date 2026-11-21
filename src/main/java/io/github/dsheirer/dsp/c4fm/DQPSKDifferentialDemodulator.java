@@ -103,8 +103,12 @@ public class DQPSKDifferentialDemodulator
     //the search to spend half of the time in an incorrect offset range at 0 dB carrier to noise.
     private static final int VERIFIED_DWELL_SYMBOLS = 24000;
     //Ambiguity search offsets, as multiples of the ambiguity step, relative to the estimator's offset.  The search
-    //direction sets the sign of the adjacent range steps.
-    private static final int[] SEARCH_STEPS = {0, 1, -1};
+    //direction sets the sign of the adjacent range steps.  A step of 2 (half of the symbol rate) is the same as -2 to
+    //the differential demodulator, so the four steps cover every carrier offset modulo the symbol rate.  Without the
+    //third step, offsets of about 1/3 to 2/3 of the symbol rate (ie 1.8 to 3.0 kHz at 4800 baud) never synchronized.
+    private static final int[] SEARCH_STEPS = {0, 1, -1, 2};
+    //Averaging period for the wide range (one sample) carrier offset estimate used to resolve the symbol rate ambiguity
+    private static final double WIDE_RANGE_AVERAGING_SYMBOLS = 480; //~0.1 seconds at 4800 baud
 
     private IRealFilter mIntegrator;
     //Sample power history spanning the reliability symbol period delay, carried across sample buffers
@@ -126,6 +130,10 @@ public class DQPSKDifferentialDemodulator
     private int mBlockPointer = 0;
     private double mBlockI = 0.0;
     private double mBlockQ = 0.0;
+    //Leaky average of x[n] * conj(x[n - 1]), the wide range carrier offset estimate
+    private double mWideRangeI = 0.0;
+    private double mWideRangeQ = 0.0;
+    private double mWideRangeGain = 1.0 / WIDE_RANGE_AVERAGING_SYMBOLS;
 
     /**
      * Constructs an instance
@@ -144,6 +152,7 @@ public class DQPSKDifferentialDemodulator
         mIntegrator = new RealFIRFilter(FilterFactory.getDifferentialIntegrator(samplesPerSymbol));
         mPowerHistory = new float[Math.max(1, (int)Math.round(samplesPerSymbol))];
         mBlockLength = (int)Math.round(ESTIMATOR_BLOCK_SYMBOLS * samplesPerSymbol);
+        mWideRangeGain = 1.0 / (WIDE_RANGE_AVERAGING_SYMBOLS * samplesPerSymbol);
         resetBlock();
     }
 
@@ -158,6 +167,8 @@ public class DQPSKDifferentialDemodulator
         mUnsynchronizedSignalSymbols = 0;
         mSearchIndexVerified = false;
         mAverageCoherence = 0.0;
+        mWideRangeI = 0.0;
+        mWideRangeQ = 0.0;
         resetBlock();
     }
 
@@ -187,6 +198,31 @@ public class DQPSKDifferentialDemodulator
     public float getFrequencyOffset()
     {
         return (float)(getOffset() / mSamplesPerSymbol);
+    }
+
+    /**
+     * Resolves the symbol rate ambiguity of a carrier offset measured by the differential demodulator and symbol
+     * processor.  The phase change across a symbol period can't distinguish carrier offsets that differ by a multiple
+     * of the symbol rate (ie 0 and 4800 Hz at 4800 baud): a signal 4800 Hz off centre decodes as well as a centred one
+     * and measures as centred, which lets the channel and tuner frequency correction loops settle on a false lock 4800 Hz
+     * away, where decoders sharing the tuner (ie C4FM) can't decode.  The phase change between consecutive samples is
+     * unambiguous to +/- half of the sample rate, and its power weighted average (the spectral centroid) is a coarse
+     * estimate that simulcast spectral tilt biases by only a fraction of the symbol rate and noise biases toward zero.
+     * The measured offset is moved by the multiple of the symbol rate that brings it nearest to that estimate, so it
+     * only changes when the two disagree by more than half of the symbol rate.
+     * @param carrierOffset measured carrier offset in radians per sample, positive when the signal is above centre.
+     * @return carrier offset in radians per sample with the symbol rate ambiguity resolved.
+     */
+    public float resolveSymbolRateAmbiguity(float carrierOffset)
+    {
+        if(mWideRangeI == 0.0 && mWideRangeQ == 0.0)
+        {
+            return carrierOffset;
+        }
+
+        double symbolRate = TWO_PI / mSamplesPerSymbol; //Radians per sample
+        double wideRange = Math.atan2(mWideRangeQ, mWideRangeI);
+        return (float)(carrierOffset + symbolRate * Math.round((wideRange - carrierOffset) / symbolRate));
     }
 
     /**
@@ -221,6 +257,7 @@ public class DQPSKDifferentialDemodulator
         float previousI = mPreviousI;
         float previousQ = mPreviousQ;
         float demodulatedI, demodulatedQ;
+        double wideRangeI = mWideRangeI, wideRangeQ = mWideRangeQ, wideRangeGain = mWideRangeGain;
 
         for(int x = 0; x < i.length; x++)
         {
@@ -228,12 +265,16 @@ public class DQPSKDifferentialDemodulator
             demodulatedI = (i[x] * previousI) + (q[x] * previousQ);
             demodulatedQ = (q[x] * previousI) - (i[x] * previousQ);
             discriminated[x] = (float)Math.atan2(demodulatedQ, demodulatedI);
+            wideRangeI += (demodulatedI - wideRangeI) * wideRangeGain;
+            wideRangeQ += (demodulatedQ - wideRangeQ) * wideRangeGain;
             previousI = i[x];
             previousQ = q[x];
         }
 
         mPreviousI = previousI;
         mPreviousQ = previousQ;
+        mWideRangeI = wideRangeI;
+        mWideRangeQ = wideRangeQ;
         mReliabilities = calculateReliabilities(i, q);
 
         float[] demodulated = mIntegrator.filter(discriminated);
