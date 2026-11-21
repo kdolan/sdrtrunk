@@ -32,3 +32,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
       - name: Build with Gradle
         run: ./gradlew clean build
+      - name: Annotate test failures
+        if: failure()
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for f in build/test-results/test/*.xml; do
+            awk 'match($0, /<testcase name="[^"]*" classname="[^"]*"/) { t = substr($0, RSTART, RLENGTH); gsub(/<testcase name="|"/, "", t); sub(/ classname=/, " ", t); split(t, a, " "); test = a[2] "." a[1] }
+                 match($0, /<failure message="[^"]*"/) { m = substr($0, RSTART + 18, RLENGTH - 19); print "::error title=" test "::" substr(m, 1, 900) }' "$f"
+          done
