@@ -286,7 +286,7 @@ public class P25ReferenceRecordingTest
     /**
      * Rock County PD W collection (2026-11-12 to 2026-11-19, ~29 dB, centred): long keyups, short bursts and rapid
      * back-and-forth exchanges.  Each floor is ~90% of the valid LDUs CQPSK decoded on 2026-11-21.  The two short
-     * recordings that decode nothing on the bench and the off-frequency recordings are documented in the README only.
+     * signalling bursts (TDUs and TSBKs, no voice) and the off-frequency recordings are documented in the README only.
      */
     private static final String[][] ROCK_COUNTY_PD_W_COLLECTION = {
         {"long/long_20261112_130208_2.5-37.5s_154815000_baseband.wav", "172"},

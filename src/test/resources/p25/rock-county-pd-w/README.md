@@ -115,12 +115,20 @@ decoded by CQPSK (`P25P1DecoderLSM`) on master `635888d1` with no frequency shif
 | `off-frequency/off-frequency_20261121_095214_3.0-12.3s_154815000_baseband.wav` | 9.3 | 1 | 7.8 | 7.8 | 0 | 0 | 28 | **0** |
 
 `P25ReferenceRecordingTest.rockCountyPDWCollectionCQPSK` checks a floor of about 90% of these LDU counts, and at most 2
-"encrypted" LDU2s and 2 foreign-NAC messages (bit-error artifacts), for every recording except the three with 0 LDUs and the off-frequency ones.
+"encrypted" LDU2s and 2 foreign-NAC messages (bit-error artifacts), for every recording except the two signalling bursts
+and the off-frequency ones.
 
-**Short bursts that don't decode on the bench.** `short_20261116_090436` and `short_20261117_065750` decode no valid
-message at all with CQPSK. The decoder still reports a valid NID 142 and 276 times, so it finds sync, but every message
-fails its checks. The live system logged calls from radios 80003, and from 16777212, 80001 and 866521, at these times.
-The live decoder may have been CQPSK_V2 then. Not investigated yet.
+**Short bursts with no voice.** `short_20261116_090436` and `short_20261117_065750` decode 0 LDUs because they carry
+no voice. They're signalling bursts, and the bench decoder (CQPSK) matches what the live system logged for each:
+
+| Recording | Bench decode | Live decode (same channel, CQPSK) |
+|---|---|---|
+| `short_20261116_090436` | 141 TDU, 1 AcknowledgeResponse, 1 DenyResponse | about 105 TDUs from 09:04:36 to :38; voice from 80003 follows at 09:04:49, after the cut |
+| `short_20261117_065750` | 275 TDU, 1 AcknowledgeResponse, 1 DenyResponse, 1 UnknownOSP, 1 invalid TDULC, 1 DroppedSamples | `ACK_RESPONSE_FNE FM:16777212 TO:866521 ACKNOWLEDGING:EMRG_ALRM_REQ`, `DENY_RESPONSE TO:866521 SERVICE:GRP_V_REQ`, about 270 TDUs, `RESERVED_23` OSP, a TDULC CRC failure and a dropped-samples event; voice from 80001 at 06:58:05 |
+
+The `065750` burst is an emergency alarm from unit 866521 being acknowledged by the system. The test doesn't check
+either recording. `short/logs/` holds the live logs from 60 s before to 75 s after each recording started: the
+channel's decoded messages, its call events, and the application log lines for this channel plus any WARN or ERROR.
 
 ### Off-frequency: the 2026-11-21 outage and the CQPSK 4800 Hz false lock
 
