@@ -114,8 +114,9 @@ decoded by CQPSK (`P25P1DecoderLSM`) on master `635888d1` with no frequency shif
 | `off-frequency/off-frequency_20261121_062841_3.0-7.3s_154815000_baseband.wav` | 4.3 | 1 | 2.8 | 2.8 | 1 | 0 | 17 | 22 |
 | `off-frequency/off-frequency_20261121_095214_3.0-12.3s_154815000_baseband.wav` | 9.3 | 1 | 7.8 | 7.8 | 0 | 0 | 28 | **0** |
 
-`P25ReferenceRecordingTest.rockCountyPDWCollectionCQPSK` checks a floor of about 90% of these LDU counts, and at most 2
-"encrypted" LDU2s and 2 foreign-NAC messages (bit-error artifacts), for every recording except the two signalling bursts
+`P25ReferenceRecordingTest.rockCountyPDWCollectionCQPSK` checks a floor of about 90% of these LDU counts. It allows
+"encrypted" LDU2s and foreign-NAC messages (bit-error artifacts) up to 5% of the valid LDUs, minimum 2. The count
+varies slightly by platform: `rapid_20261119_120004` decodes 2 on Windows and 3 on the Linux CI runner. It covers every recording except the two signalling bursts
 and the off-frequency ones. `P25P1LSMFrequencyAmbiguityTest` uses the off-frequency recordings.
 
 **Short bursts with no voice.** `short_20261116_090436` and `short_20261117_065750` decode 0 LDUs because they carry

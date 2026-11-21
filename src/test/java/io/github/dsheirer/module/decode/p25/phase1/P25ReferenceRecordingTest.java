@@ -329,8 +329,12 @@ public class P25ReferenceRecordingTest
             int floor = Integer.parseInt(entry[1]);
 
             //The channel is never encrypted and has one NAC: an occasional "encrypted" LDU2 or foreign NAC is a bit-error
-            //artifact, a run of them isn't
-            if(r.validLdu < floor || r.encryptedLdu2 > 2 || r.foreignNac > 2)
+            //artifact, while real encryption flags every LDU2 (half of the LDUs).  The artifact count varies slightly by
+            //platform (rapid_20261119_120004: 2 on Windows, 3 on the Linux CI runner), so the limit scales with the
+            //decode: 5% of the valid LDUs, at least 2.
+            int artifactLimit = Math.max(2, r.validLdu / 20);
+
+            if(r.validLdu < floor || r.encryptedLdu2 > artifactLimit || r.foreignNac > artifactLimit)
             {
                 failures.append("\n").append(entry[0]).append(" (floor ").append(floor).append("): ").append(r);
             }
