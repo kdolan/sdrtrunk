@@ -77,6 +77,8 @@ public class ChannelMetadataView extends VBox implements ChannelMetadataModel.Li
     private static final String EMPTY_IDENTIFIER = "-----";
     private static final String EMPTY_STATE = "----";
     private static final Map<State,String> STATE_STYLES = new EnumMap<>(State.class);
+    //Activity-triggered recording without a call (Swing version: red background, white text)
+    private static final String RECORDING_STYLE = style("#C80000", "#FFFFFF");
 
     static
     {
@@ -293,10 +295,24 @@ public class ChannelMetadataView extends VBox implements ChannelMetadataModel.Li
             {
                 super.updateItem(state, empty);
 
+                //Activity-triggered baseband recording in progress for this channel
+                Row row = getTableRow() != null ? getTableRow().getItem() : null;
+                boolean recording = !empty && row != null && row.getChannelMetadata().isActivityRecording();
+
                 if(empty)
                 {
                     setText(null);
                     setStyle(null);
+                }
+                else if(recording && state == State.CALL)
+                {
+                    setText("CALL/REC");
+                    setStyle(STATE_STYLES.get(State.CALL));
+                }
+                else if(recording)
+                {
+                    setText("RECORDING");
+                    setStyle(RECORDING_STYLE);
                 }
                 else if(state == null)
                 {
