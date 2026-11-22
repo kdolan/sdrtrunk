@@ -33,7 +33,7 @@ import io.github.dsheirer.module.decode.p25.phase1.Modulation;
 import io.github.dsheirer.module.log.EventLogType;
 import io.github.dsheirer.module.log.config.EventLogConfiguration;
 import io.github.dsheirer.playlist.PlaylistManager;
-import io.github.dsheirer.preference.UserPreferences;
+import io.github.dsheirer.settings.Settings;
 import io.github.dsheirer.record.RecorderType;
 import io.github.dsheirer.record.config.RecordConfiguration;
 import io.github.dsheirer.source.config.SourceConfiguration;
@@ -73,6 +73,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
     private EventLogConfigurationEditor mEventLogConfigurationEditor;
     private RecordConfigurationEditor mRecordConfigurationEditor;
     private ToggleSwitch mIgnoreDataCallsButton;
+    private ToggleSwitch mIgnoreEncryptedCallsButton;
     private Spinner<Integer> mTrafficChannelPoolSizeSpinner;
     private Spinner<Integer> mNACSpinner;
     private Label mNACLabel;
@@ -110,12 +111,12 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
      * Constructs an instance
      * @param playlistManager for playlists
      * @param tunerManager for tuners
-     * @param userPreferences for preferences
+     * @param settings for preferences
      */
     public P25P1ConfigurationEditor(PlaylistManager playlistManager, TunerManager tunerManager,
-                                    UserPreferences userPreferences, IFilterProcessor filterProcessor)
+                                    Settings settings, IFilterProcessor filterProcessor)
     {
-        super(playlistManager, tunerManager, userPreferences, filterProcessor);
+        super(playlistManager, tunerManager, settings, filterProcessor);
         getTitledPanesBox().getChildren().add(getSourcePane());
         getTitledPanesBox().getChildren().add(getDecoderPane());
         getTitledPanesBox().getChildren().add(getEventLogPane());
@@ -180,6 +181,15 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             GridPane.setHalignment(directionLabel, HPos.LEFT);
             GridPane.setConstraints(directionLabel, 5, row);
             gridPane.getChildren().add(directionLabel);
+
+            GridPane.setConstraints(getIgnoreEncryptedCallsButton(), 6, row);
+            gridPane.getChildren().add(getIgnoreEncryptedCallsButton());
+
+            Label ignoreEncryptedLabel = new Label("Ignore Encrypted Calls");
+            ignoreEncryptedLabel.setLabelFor(getIgnoreEncryptedCallsButton());
+            GridPane.setHalignment(ignoreEncryptedLabel, HPos.LEFT);
+            GridPane.setConstraints(ignoreEncryptedLabel, 7, row);
+            gridPane.getChildren().add(ignoreEncryptedLabel);
 
             // NAC configuration (row 1) - visible for all modulations
             mNACLabel = new Label("NAC (0=auto)");
@@ -486,6 +496,21 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         return mLSMv2ToggleButton;
     }
 
+    private ToggleSwitch getIgnoreEncryptedCallsButton()
+    {
+        if(mIgnoreEncryptedCallsButton == null)
+        {
+            mIgnoreEncryptedCallsButton = new AccessibleToggleSwitch();
+            mIgnoreEncryptedCallsButton.setDisable(true);
+            mIgnoreEncryptedCallsButton.setTooltip(new Tooltip("Don't tune a traffic channel when the channel grant indicates the call is encrypted.  " +
+                    "Phase 2: the channel is still tuned when the other timeslot has a clear call."));
+            mIgnoreEncryptedCallsButton.selectedProperty()
+                .addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));
+        }
+
+        return mIgnoreEncryptedCallsButton;
+    }
+
     private ToggleSwitch getIgnoreDataCallsButton()
     {
         if(mIgnoreDataCallsButton == null)
@@ -773,10 +798,12 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         getCmaTrackingMuSpinner().setDisable(!enabled);
         getCmaGearShiftMsSpinner().setDisable(!enabled);
         getPipelineDiagnosticsSwitch().setDisable(!enabled);
+        getIgnoreEncryptedCallsButton().setDisable(!enabled);
 
         if(config instanceof DecodeConfigP25Phase1 decodeConfig)
         {
             getIgnoreDataCallsButton().setSelected(decodeConfig.getIgnoreDataCalls());
+            getIgnoreEncryptedCallsButton().setSelected(decodeConfig.getIgnoreEncryptedCalls());
             getTrafficChannelPoolSizeSpinner().getValueFactory().setValue(decodeConfig.getTrafficChannelPoolSize());
             getNACSpinner().getValueFactory().setValue(decodeConfig.getConfiguredNAC());
             getPipelineDiagnosticsSwitch().setSelected(decodeConfig.isPipelineDiagnostics());
@@ -821,6 +848,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         else
         {
             getIgnoreDataCallsButton().setSelected(false);
+            getIgnoreEncryptedCallsButton().setSelected(false);
             getTrafficChannelPoolSizeSpinner().getValueFactory().setValue(0);
             getNACSpinner().getValueFactory().setValue(0);
             getIgnoreEncryptionSwitch().setSelected(false);
@@ -856,6 +884,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         }
 
         config.setIgnoreDataCalls(getIgnoreDataCallsButton().isSelected());
+        config.setIgnoreEncryptedCalls(getIgnoreEncryptedCallsButton().isSelected());
         config.setTrafficChannelPoolSize(getTrafficChannelPoolSizeSpinner().getValue());
         config.setConfiguredNAC(getNACSpinner().getValue());
         config.setPipelineDiagnostics(getPipelineDiagnosticsSwitch().isSelected());

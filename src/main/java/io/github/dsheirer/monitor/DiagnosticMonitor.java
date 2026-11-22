@@ -1,6 +1,6 @@
 /*
  * *****************************************************************************
- * Copyright (C) 2014-2024 Dennis Sheirer
+ * Copyright (C) 2014-2026 Dennis Sheirer
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,7 +21,7 @@ package io.github.dsheirer.monitor;
 
 import io.github.dsheirer.controller.channel.ChannelProcessingManager;
 import io.github.dsheirer.log.LoggingSuppressor;
-import io.github.dsheirer.preference.UserPreferences;
+import io.github.dsheirer.settings.Settings;
 import io.github.dsheirer.source.tuner.manager.TunerManager;
 import io.github.dsheirer.util.ThreadPool;
 import io.github.dsheirer.util.TimeStamp;
@@ -39,11 +39,12 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
+import javafx.application.Platform;
+import javafx.scene.control.Alert;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.JOptionPane;
 
 /**
  * Utility class for monitoring system components and producing logging reports.
@@ -53,7 +54,7 @@ public class DiagnosticMonitor
     private static final Logger LOGGER = LoggerFactory.getLogger(DiagnosticMonitor.class);
     private final LoggingSuppressor LOG_SUPPRESSOR = new LoggingSuppressor(LOGGER);
     private static final String DIVIDER = "\n\n=========================================================================\n\n";
-    private UserPreferences mUserPreferences;
+    private Settings mSettings;
     private ChannelProcessingManager mChannelProcessingManager;
     private TunerManager mTunerManager;
     private ScheduledFuture<?> mBlockedThreadMonitorHandle;
@@ -64,15 +65,15 @@ public class DiagnosticMonitor
 
     /**
      * Constructs an instance
-     * @param userPreferences for application logging directory lookup.
+     * @param settings for application logging directory lookup.
      * @param channelProcessingManager for accessing running channel information
      * @param tunerManager for accessing allocated tuner channel information
      * @param headless to indicate if the thread deadlock monitor should show a user notification.
      */
-    public DiagnosticMonitor(UserPreferences userPreferences, ChannelProcessingManager channelProcessingManager,
+    public DiagnosticMonitor(Settings settings, ChannelProcessingManager channelProcessingManager,
                              TunerManager tunerManager, boolean headless)
     {
-        mUserPreferences = userPreferences;
+        mSettings = settings;
         mChannelProcessingManager = channelProcessingManager;
         mTunerManager = tunerManager;
         mHeadless = headless;
@@ -88,7 +89,7 @@ public class DiagnosticMonitor
             mBlockedThreadMonitorHandle.cancel(true);
         }
 
-        if(mUserPreferences.getApplicationPreference().isAutomaticDiagnosticMonitoring())
+        if(mSettings.getApplicationSettings().isAutomaticDiagnosticMonitoring())
         {
             LOGGER.info("Diagnostic monitoring enabled running every 30 seconds");
             mBlockedThreadMonitorHandle = ThreadPool.SCHEDULED.scheduleAtFixedRate(mMonitor, 30, 30, TimeUnit.SECONDS);
@@ -155,7 +156,12 @@ public class DiagnosticMonitor
                                          "The application may degrade over time and eventually run out of memory.\n" +
                                          "A diagnostic report was generated.  Please open an issue on the GitHub\n" +
                                          "website and attach this diagnostic report:\n\n" + reportPath.toString();
-                        JOptionPane.showMessageDialog(null, message, title, JOptionPane.ERROR_MESSAGE);
+                        Platform.runLater(() -> {
+                            Alert alert = new Alert(Alert.AlertType.ERROR, message);
+                            alert.setTitle(title);
+                            alert.setHeaderText("Thread deadlock detected");
+                            alert.show();
+                        });
                     }
                 }
             }
@@ -191,7 +197,7 @@ public class DiagnosticMonitor
         sb.append(getThreadDumpReport());
         sb.append(DIVIDER);
 
-        Path logDirectory = mUserPreferences.getDirectoryPreference().getDirectoryApplicationLog();
+        Path logDirectory = mSettings.getDirectorySettings().getDirectoryApplicationLog();
         String file = TimeStamp.getFileFormattedDateTime() + "_sdrtrunk_processing_diagnostic_report.log";
         Path output = logDirectory.resolve(file);
         Files.write(output, sb.toString().getBytes());
@@ -206,7 +212,7 @@ public class DiagnosticMonitor
     public Path generateThreadDumpReport() throws IOException
     {
         String report = getThreadDumpReport();
-        Path logDirectory = mUserPreferences.getDirectoryPreference().getDirectoryApplicationLog();
+        Path logDirectory = mSettings.getDirectorySettings().getDirectoryApplicationLog();
         String file = TimeStamp.getFileFormattedDateTime() + "_sdrtrunk_thread_dump.log";
         Path output = logDirectory.resolve(file);
         Files.write(output, report.getBytes());
@@ -247,6 +253,7 @@ public class DiagnosticMonitor
         Attributes atts = findManifestAttributes();
         if (atts != null) {
             sb.append("\nVersion  : " + atts.getValue("Implementation-Version"));
+            sb.append("\nGit Describe      : " + atts.getValue("Git-Describe"));
             sb.append("\nGradle Version    : " + atts.getValue("Created-By"));
             sb.append("\nBuild Timestamp   : " + atts.getValue("Build-Timestamp"));
             sb.append("\nBuild-JDK         : " + atts.getValue("Build-JDK"));
@@ -267,11 +274,11 @@ public class DiagnosticMonitor
         sb.append("\nHost Used Memory:      " + FileUtils.byteCountToDisplaySize(Runtime.getRuntime().totalMemory() -
                 Runtime.getRuntime().freeMemory()));
         sb.append("\nStorage Directories:");
-        sb.append("\n Application Root: " + mUserPreferences.getDirectoryPreference().getDirectoryApplicationRoot());
-        sb.append("\n Application Log:  " + mUserPreferences.getDirectoryPreference().getDirectoryApplicationLog());
-        sb.append("\n Event Log:        " + mUserPreferences.getDirectoryPreference().getDirectoryEventLog());
-        sb.append("\n Playlist:         " + mUserPreferences.getDirectoryPreference().getDirectoryPlaylist());
-        sb.append("\n Recordings:       " + mUserPreferences.getDirectoryPreference().getDirectoryRecording());
+        sb.append("\n Application Root: " + mSettings.getDirectorySettings().getDirectoryApplicationRoot());
+        sb.append("\n Application Log:  " + mSettings.getDirectorySettings().getDirectoryApplicationLog());
+        sb.append("\n Event Log:        " + mSettings.getDirectorySettings().getDirectoryEventLog());
+        sb.append("\n Playlist:         " + mSettings.getDirectorySettings().getDirectoryPlaylist());
+        sb.append("\n Recordings:       " + mSettings.getDirectorySettings().getDirectoryRecording());
         sb.append("\n");
         return sb.toString();
     }

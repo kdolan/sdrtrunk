@@ -21,7 +21,7 @@ package io.github.dsheirer.audio.broadcast;
 import io.github.dsheirer.alias.AliasModel;
 import io.github.dsheirer.alias.id.broadcast.BroadcastChannel;
 import io.github.dsheirer.icon.IconModel;
-import io.github.dsheirer.preference.UserPreferences;
+import io.github.dsheirer.settings.Settings;
 import io.github.dsheirer.properties.SystemProperties;
 import io.github.dsheirer.sample.Broadcaster;
 import io.github.dsheirer.sample.Listener;
@@ -46,9 +46,8 @@ import javafx.collections.ObservableList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.table.AbstractTableModel;
 
-public class BroadcastModel extends AbstractTableModel implements Listener<AudioRecording>
+public class BroadcastModel implements Listener<AudioRecording>
 {
     private final static Logger mLog = LoggerFactory.getLogger(BroadcastModel.class);
 
@@ -56,18 +55,6 @@ public class BroadcastModel extends AbstractTableModel implements Listener<Audio
     public static final String TEMPORARY_STREAM_FILE_SUFFIX = "temporary_streaming_file_";
 
     private static final String UNIQUE_NAME_REGEX = "(.*)\\((\\d*)\\)";
-
-    public static final int COLUMN_BROADCAST_SERVER_TYPE = 0;
-    public static final int COLUMN_STREAM_NAME = 1;
-    public static final int COLUMN_BROADCASTER_STATUS = 2;
-    public static final int COLUMN_BROADCASTER_QUEUE_SIZE = 3;
-    public static final int COLUMN_BROADCASTER_STREAMED_COUNT = 4;
-    public static final int COLUMN_BROADCASTER_DUPLICATE_REJECTED_COUNT = 5;
-    public static final int COLUMN_BROADCASTER_AGED_OFF_COUNT = 6;
-    public static final int COLUMN_BROADCASTER_ERROR_COUNT = 7;
-
-    public static final String[] COLUMN_NAMES = new String[]
-        {"Stream Type", "Name", "Status", "Queued", "Streamed/Uploaded", "Duplicate Rejected", "Aged Off", "Upload Error"};
 
     private ObservableList<ConfiguredBroadcast> mConfiguredBroadcasts =
         FXCollections.observableArrayList(ConfiguredBroadcast.extractor());
@@ -77,16 +64,16 @@ public class BroadcastModel extends AbstractTableModel implements Listener<Audio
     private AliasModel mAliasModel;
     private Broadcaster<BroadcastEvent> mBroadcastEventBroadcaster = new Broadcaster<>();
     private BroadcastEventListener mBroadcastEventListener = new BroadcastEventListener();
-    private UserPreferences mUserPreferences;
+    private Settings mSettings;
 
     /**
      * Model for managing Broadcast configurations and any associated broadcaster instances.
      */
-    public BroadcastModel(AliasModel aliasModel, IconModel iconModel, UserPreferences userPreferences)
+    public BroadcastModel(AliasModel aliasModel, IconModel iconModel, Settings settings)
     {
         mAliasModel = aliasModel;
         mIconModel = iconModel;
-        mUserPreferences = userPreferences;
+        mSettings = settings;
 
         //Monitor to remove temporary recording files that have been streamed by all audio broadcasters
         ThreadPool.SCHEDULED.scheduleAtFixedRate(new RecordingDeletionMonitor(), 15l, 15l, TimeUnit.SECONDS);
@@ -171,8 +158,6 @@ public class BroadcastModel extends AbstractTableModel implements Listener<Audio
             {
                 configuredBroadcast = new ConfiguredBroadcast(configuration);
                 mConfiguredBroadcasts.add(configuredBroadcast);
-                int index = mConfiguredBroadcasts.indexOf(configuredBroadcast);
-                fireTableRowsInserted(index, index);
                 process(new BroadcastEvent(configuration, BroadcastEvent.Event.CONFIGURATION_ADD));
                 return configuredBroadcast;
             }
@@ -274,8 +259,6 @@ public class BroadcastModel extends AbstractTableModel implements Listener<Audio
 
         if(configuredBroadcast != null)
         {
-            int index = mConfiguredBroadcasts.indexOf(configuredBroadcast);
-
             mConfiguredBroadcasts.remove(configuredBroadcast);
 
             if(configuredBroadcast.hasAudioBroadcaster())
@@ -286,8 +269,6 @@ public class BroadcastModel extends AbstractTableModel implements Listener<Audio
             }
 
             process(new BroadcastEvent(broadcastConfiguration, BroadcastEvent.Event.CONFIGURATION_DELETE));
-
-            fireTableRowsDeleted(index, index);
         }
     }
 
@@ -346,20 +327,13 @@ public class BroadcastModel extends AbstractTableModel implements Listener<Audio
             }
 
             final AbstractAudioBroadcaster audioBroadcaster = BroadcastFactory.getBroadcaster(broadcastConfiguration,
-                    mAliasModel, mUserPreferences);
+                    mAliasModel, mSettings);
 
             if(audioBroadcaster != null)
             {
                 configuredBroadcast.setAudioBroadcaster(audioBroadcaster);
                 audioBroadcaster.setListener(mBroadcastEventListener);
                 mBroadcasterMap.put(audioBroadcaster.getBroadcastConfiguration().getId(), audioBroadcaster);
-
-                int index = mConfiguredBroadcasts.indexOf(configuredBroadcast);
-
-                if(index >= 0)
-                {
-                    fireTableRowsUpdated(index, index);
-                }
 
                 broadcast(new BroadcastEvent(audioBroadcaster, BroadcastEvent.Event.BROADCASTER_ADD));
                 ThreadPool.CACHED.submit(() -> audioBroadcaster.start());
@@ -382,13 +356,6 @@ public class BroadcastModel extends AbstractTableModel implements Listener<Audio
             broadcaster.stop();
             broadcaster.removeListener();
             broadcaster.dispose();
-
-            int index = mConfiguredBroadcasts.indexOf(configuredBroadcast);
-
-            if(index >= 0)
-            {
-                fireTableRowsUpdated(index, index);
-            }
 
             broadcast(new BroadcastEvent(broadcaster, BroadcastEvent.Event.BROADCASTER_DELETE));
         }
@@ -498,184 +465,15 @@ public class BroadcastModel extends AbstractTableModel implements Listener<Audio
                         ThreadPool.SCHEDULED.schedule(new DelayedBroadcasterStartup(broadcastConfiguration),
                             1, TimeUnit.SECONDS);
                     }
-
-                    int index = mConfiguredBroadcasts.indexOf(configuredBroadcast);
-                    fireTableRowsUpdated(index, index);
                     break;
                 case CONFIGURATION_DELETE:
                     deleteBroadcaster(getConfiguredBroadcast(broadcastEvent.getBroadcastConfiguration()));
                     break;
             }
         }
-        else if(broadcastEvent.isAudioBroadcasterEvent())
-        {
-            ConfiguredBroadcast configuredBroadcast = getConfiguredBroadcast(broadcastEvent.getAudioBroadcaster());
-            int row = mConfiguredBroadcasts.indexOf(configuredBroadcast);
-
-            switch(broadcastEvent.getEvent())
-            {
-                case BROADCASTER_QUEUE_CHANGE:
-                    if(row >= 0)
-                    {
-                        fireTableCellUpdated(row, COLUMN_BROADCASTER_QUEUE_SIZE);
-                    }
-                    break;
-                case BROADCASTER_STATE_CHANGE:
-                    if(row >= 0)
-                    {
-                        fireTableCellUpdated(row, COLUMN_BROADCASTER_STATUS);
-                    }
-                    break;
-                case BROADCASTER_STREAMED_COUNT_CHANGE:
-                    if(row >= 0)
-                    {
-                        fireTableCellUpdated(row, COLUMN_BROADCASTER_STREAMED_COUNT);
-                    }
-                    break;
-                case BROADCASTER_DUPLICATE_REJECTED_COUNT_CHANGE:
-                    if(row >= 0)
-                    {
-                        fireTableCellUpdated(row, COLUMN_BROADCASTER_DUPLICATE_REJECTED_COUNT);
-                    }
-                    break;
-                case BROADCASTER_AGED_OFF_COUNT_CHANGE:
-                    if(row >= 0)
-                    {
-                        fireTableCellUpdated(row, COLUMN_BROADCASTER_AGED_OFF_COUNT);
-                    }
-                case BROADCASTER_ERROR_COUNT_CHANGE:
-                    if(row >= 0)
-                    {
-                        fireTableCellUpdated(row, COLUMN_BROADCASTER_ERROR_COUNT);
-                    }
-                    break;
-            }
-        }
 
         //Rebroadcast the event to any listeners of this model
         broadcast(broadcastEvent);
-    }
-
-    @Override
-    public int getRowCount()
-    {
-        return mConfiguredBroadcasts.size();
-    }
-
-    @Override
-    public int getColumnCount()
-    {
-        return COLUMN_NAMES.length;
-    }
-
-    @Override
-    public Object getValueAt(int rowIndex, int columnIndex)
-    {
-        try
-        {
-            if(rowIndex <= mConfiguredBroadcasts.size())
-            {
-                ConfiguredBroadcast configuredBroadcast = mConfiguredBroadcasts.get(rowIndex);
-
-                if(configuredBroadcast != null)
-                {
-                    switch(columnIndex)
-                    {
-                        case COLUMN_BROADCAST_SERVER_TYPE:
-                            return configuredBroadcast.getBroadcastServerType();
-                        case COLUMN_STREAM_NAME:
-                            return configuredBroadcast.getBroadcastConfiguration().getName();
-                        case COLUMN_BROADCASTER_STATUS:
-                            if(configuredBroadcast.hasAudioBroadcaster())
-                            {
-                                return configuredBroadcast.getAudioBroadcaster().getBroadcastState();
-                            }
-                            else if(!configuredBroadcast.getBroadcastConfiguration().isEnabled())
-                            {
-                                return BroadcastState.DISABLED;
-                            }
-                            else if(!configuredBroadcast.getBroadcastConfiguration().isValid())
-                            {
-                                return BroadcastState.INVALID_SETTINGS;
-                            }
-                            else
-                            {
-                                return BroadcastState.ERROR;
-                            }
-                        case COLUMN_BROADCASTER_QUEUE_SIZE:
-                            if(configuredBroadcast.hasAudioBroadcaster())
-                            {
-                                return configuredBroadcast.getAudioBroadcaster().getAudioQueueSize();
-                            }
-                            break;
-                        case COLUMN_BROADCASTER_STREAMED_COUNT:
-                            if(configuredBroadcast.hasAudioBroadcaster())
-                            {
-                                return configuredBroadcast.getAudioBroadcaster().getStreamedAudioCount();
-                            }
-                            break;
-                        case COLUMN_BROADCASTER_DUPLICATE_REJECTED_COUNT:
-                            if(configuredBroadcast.hasAudioBroadcaster())
-                            {
-                                return configuredBroadcast.getAudioBroadcaster().getDuplicateRejectedAudioCount();
-                            }
-                            break;
-                        case COLUMN_BROADCASTER_AGED_OFF_COUNT:
-                            if(configuredBroadcast.hasAudioBroadcaster())
-                            {
-                                return configuredBroadcast.getAudioBroadcaster().getAgedOffAudioCount();
-                            }
-                            break;
-                        case COLUMN_BROADCASTER_ERROR_COUNT:
-                            if(configuredBroadcast.hasAudioBroadcaster())
-                            {
-                                return configuredBroadcast.getAudioBroadcaster().getAudioErrorCount();
-                            }
-                            break;
-                        default:
-                            break;
-                    }
-                }
-            }
-        }
-        catch(Exception e)
-        {
-            mLog.error("Error accessing data in broadcast model", e);
-        }
-
-        return null;
-    }
-
-    @Override
-    public Class<?> getColumnClass(int columnIndex)
-    {
-        switch(columnIndex)
-        {
-            case COLUMN_BROADCASTER_STATUS:
-                return BroadcastState.class;
-            case COLUMN_BROADCASTER_AGED_OFF_COUNT:
-            case COLUMN_BROADCASTER_QUEUE_SIZE:
-            case COLUMN_BROADCASTER_STREAMED_COUNT:
-            case COLUMN_BROADCASTER_DUPLICATE_REJECTED_COUNT:
-            case COLUMN_BROADCASTER_ERROR_COUNT:
-                return Integer.class;
-            case COLUMN_BROADCAST_SERVER_TYPE:
-                return BroadcastServerType.class;
-            case COLUMN_STREAM_NAME:
-            default:
-                return String.class;
-        }
-    }
-
-    @Override
-    public String getColumnName(int column)
-    {
-        if(0 <= column && column < COLUMN_NAMES.length)
-        {
-            return COLUMN_NAMES[column];
-        }
-
-        return null;
     }
 
     /**

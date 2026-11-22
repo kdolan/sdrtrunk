@@ -1,6 +1,6 @@
 /*
  * *****************************************************************************
- * Copyright (C) 2014-2022 Dennis Sheirer
+ * Copyright (C) 2014-2024 Dennis Sheirer
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,188 +16,249 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>
  * ****************************************************************************
  */
+
 package io.github.dsheirer.settings;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
-import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement;
-import io.github.dsheirer.map.DefaultIcon;
-import io.github.dsheirer.map.MapIcon;
-import io.github.dsheirer.settings.ColorSetting.ColorSettingName;
-import io.github.dsheirer.source.recording.RecordingConfiguration;
-import io.github.dsheirer.source.tuner.configuration.TunerConfiguration;
+import io.github.dsheirer.eventbus.MyEventBus;
+import io.github.dsheirer.settings.application.ApplicationSettings;
+import io.github.dsheirer.settings.calibration.VectorCalibrationSettings;
+import io.github.dsheirer.settings.decoder.JmbeLibrarySettings;
+import io.github.dsheirer.settings.decoder.Mdc1200Settings;
+import io.github.dsheirer.settings.directory.DirectorySettings;
+import io.github.dsheirer.settings.duplicate.CallManagementSettings;
+import io.github.dsheirer.settings.event.DecodeEventSettings;
+import io.github.dsheirer.settings.identifier.TalkgroupFormatSettings;
+import io.github.dsheirer.settings.javafx.JavaFxSettings;
+import io.github.dsheirer.settings.map.MapSettings;
+import io.github.dsheirer.settings.mp3.MP3Settings;
+import io.github.dsheirer.settings.playback.PlaybackSettings;
+import io.github.dsheirer.settings.playlist.PlaylistSettings;
+import io.github.dsheirer.settings.radioreference.RadioReferenceSettings;
+import io.github.dsheirer.settings.record.RecordSettings;
+import io.github.dsheirer.settings.source.TunerSettings;
+import io.github.dsheirer.settings.swing.SwingSettings;
+import io.github.dsheirer.sample.Listener;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
-@JacksonXmlRootElement(localName = "SDRTrunk_settings")
-public class Settings
+/**
+ * Application settings: a collection of settings groups that can be accessed by settings type.  The stored values are
+ * listed in the {@link Setting} enumeration.
+ *
+ * Note: settings updates are broadcast throughout the system using the Google Guava Event Bus.  Each component
+ * can register with the event bus and annotate a method to receive updates:
+ *
+ * To register a component to receive events, add this in the constructor:
+ * MyEventBus.getEventBus().register(this);
+ *
+ * To receive setting update notifications, annotate a method with @Subscribe and use a SettingsType argument:
+ *
+ * @Subscribe
+ * public void settingsUpdated(SettingsType settingsType)
+ * {
+ * }
+ */
+public class Settings implements Listener<SettingsType>
 {
-    private List<Setting> mSettings = new ArrayList<Setting>();
+    private ApplicationSettings mApplicationSettings;
+    private DecodeEventSettings mDecodeEventSettings;
+    private DirectorySettings mDirectorySettings;
+    private CallManagementSettings mCallManagementSettings;
+    private JmbeLibrarySettings mJmbeLibrarySettings;
+    private Mdc1200Settings mMdc1200Settings;
+    private MapSettings mMapSettings;
+    private MP3Settings mMP3Settings;
+    private PlaybackSettings mPlaybackSettings;
+    private PlaylistSettings mPlaylistSettings;
+    private RadioReferenceSettings mRadioReferenceSettings;
+    private RecordSettings mRecordSettings;
+    private TalkgroupFormatSettings mTalkgroupFormatSettings;
+    private TunerSettings mTunerSettings;
+    private VectorCalibrationSettings mVectorCalibrationSettings;
 
-    private List<TunerConfiguration> mTunerConfiguration = new ArrayList<TunerConfiguration>();
+    private SwingSettings mSwingSettings = new SwingSettings();
+    private JavaFxSettings mJavaFxSettings = new JavaFxSettings();
 
-    //No longer used
-    private List<RecordingConfiguration> mRecordingConfigurations = new ArrayList<RecordingConfiguration>();
-
+    /**
+     * Constructs a new settings instance
+     */
     public Settings()
     {
+        loadSettings();
     }
 
-    @JacksonXmlProperty(isAttribute = false, localName = "recording_configuration")
-    public List<RecordingConfiguration> getRecordingConfigurations()
+    /**
+     * Application general/miscellaneous settings.
+     * @return application settings.
+     */
+    public ApplicationSettings getApplicationSettings()
     {
-        return Collections.emptyList();
+        return mApplicationSettings;
     }
 
-    public void setRecordingConfigurations(List<RecordingConfiguration> configs)
+    /**
+     * Vector/SIMD calibration settings.
+     * @return vector calibration settings.
+     */
+    public VectorCalibrationSettings getVectorCalibrationSettings()
     {
+        return mVectorCalibrationSettings;
     }
 
-    @JacksonXmlProperty(isAttribute = false, localName = "tuner_configuration")
-    public List<TunerConfiguration> getTunerConfigurations()
+    /**
+     * Java FX window management settings
+     */
+    public JavaFxSettings getJavaFxSettings()
     {
-        return mTunerConfiguration;
+        return mJavaFxSettings;
     }
 
-    public void setTunerConfigurations(List<TunerConfiguration> configs)
+    /**
+     * Decode Event settings
+     */
+    public DecodeEventSettings getDecodeEventSettings()
     {
-        mTunerConfiguration = configs;
+        return mDecodeEventSettings;
     }
 
-    @JacksonXmlProperty(isAttribute = false, localName = "setting")
-    public List<Setting> getSettings()
+    /**
+     * Decoder settings
+     */
+    /**
+     * MDC-1200 decoder settings
+     */
+    public Mdc1200Settings getMdc1200Settings()
     {
-        return mSettings;
+        return mMdc1200Settings;
     }
 
-    public void setSettings(ArrayList<Setting> settings)
+    /**
+     * JMBE audio library settings
+     */
+    public JmbeLibrarySettings getJmbeLibrarySettings()
     {
-        mSettings = settings;
+        return mJmbeLibrarySettings;
     }
 
-    public Setting getSetting(String name)
+    /**
+     * Directory settings
+     */
+    public DirectorySettings getDirectorySettings()
     {
-        for(Setting setting : mSettings)
-        {
-            if(setting.getName().contentEquals(name))
-            {
-                return setting;
-            }
-        }
-
-        return null;
+        return mDirectorySettings;
     }
 
-    public void addSetting(Setting setting)
+    /**
+     * Audio playback settings
+     */
+    public PlaybackSettings getPlaybackSettings()
     {
-        mSettings.add(setting);
+        return mPlaybackSettings;
     }
 
-    public void removeSetting(Setting setting)
+    /**
+     * Playlist settings
+     */
+    public PlaylistSettings getPlaylistSettings()
     {
-        mSettings.remove(setting);
+        return mPlaylistSettings;
     }
 
-    @JsonIgnore
-    public DefaultIcon getDefaultIcon()
+    /**
+     * Radio reference web services settings
+     */
+    public RadioReferenceSettings getRadioReferenceSettings()
     {
-        for(Setting setting : mSettings)
-        {
-            if(setting instanceof DefaultIcon)
-            {
-                return (DefaultIcon)setting;
-            }
-        }
-
-        return null;
+        return mRadioReferenceSettings;
     }
 
-    public ColorSetting getColorSetting(ColorSettingName name)
+    /**
+     * Recording settings
+     */
+    public RecordSettings getRecordSettings()
     {
-        for(Setting setting : mSettings)
-        {
-            if(setting instanceof ColorSetting &&
-                ((ColorSetting)setting).getColorSettingName() == name)
-            {
-                return (ColorSetting)setting;
-            }
-        }
-
-        return null;
+        return mRecordSettings;
     }
 
-    @JsonIgnore
-    public List<ColorSetting> getColorSettings()
+    /**
+     * MP3 settings
+     */
+    public MP3Settings getMP3Settings()
     {
-        ArrayList<ColorSetting> colors = new ArrayList<ColorSetting>();
-
-        for(Setting setting : mSettings)
-        {
-            if(setting instanceof ColorSetting)
-            {
-                colors.add((ColorSetting)setting);
-            }
-        }
-
-        return colors;
+        return mMP3Settings;
     }
 
-    public FileSetting getFileSetting(String name)
+    /**
+     * Identifier settings
+     */
+    public TalkgroupFormatSettings getTalkgroupFormatSettings()
     {
-        for(Setting setting : mSettings)
-        {
-            if(setting instanceof FileSetting &&
-                setting.getName().contentEquals(name))
-            {
-                return (FileSetting)setting;
-            }
-        }
-
-        return null;
+        return mTalkgroupFormatSettings;
     }
 
-    public MapIcon getMapIcon(String name)
+    /**
+     * Tuner settings
+     */
+    public TunerSettings getTunerSettings()
     {
-        for(Setting setting : mSettings)
-        {
-            if(setting instanceof MapIcon &&
-                setting.getName().contentEquals(name))
-            {
-                return (MapIcon)setting;
-            }
-        }
-
-        return null;
+        return mTunerSettings;
     }
 
-    public ArrayList<MapIcon> getMapIcons()
+
+    /**
+     * Window locations and table column widths stored by the earlier Swing version of the application.  Used only to
+     * migrate those settings to the JavaFX windows and tables.
+     */
+    public SwingSettings getSwingSettings()
     {
-        ArrayList<MapIcon> icons = new ArrayList<MapIcon>();
-
-        for(Setting setting : mSettings)
-        {
-            if(setting instanceof MapIcon)
-            {
-                icons.add((MapIcon)setting);
-            }
-        }
-
-        return icons;
+        return mSwingSettings;
     }
 
-    public MapViewSetting getMapViewSetting(String name)
+    /**
+     * Map view settings: the last center point and zoom level
+     */
+    public MapSettings getMapSettings()
     {
-        for(Setting setting : mSettings)
-        {
-            if(setting instanceof MapViewSetting &&
-                setting.getName().contentEquals(name))
-            {
-                return (MapViewSetting)setting;
-            }
-        }
+        return mMapSettings;
+    }
 
-        return null;
+    /**
+     * Call management and duplicate call detection settings
+     */
+    public CallManagementSettings getCallManagementSettings()
+    {
+        return mCallManagementSettings;
+    }
+
+    /**
+     * Loads the managed settings
+     */
+    private void loadSettings()
+    {
+        mApplicationSettings = new ApplicationSettings(this::receive);
+        mDecodeEventSettings = new DecodeEventSettings(this::receive);
+        mDirectorySettings = new DirectorySettings(this::receive);
+        mCallManagementSettings = new CallManagementSettings(this::receive);
+        mJmbeLibrarySettings = new JmbeLibrarySettings(this::receive);
+        mMdc1200Settings = new Mdc1200Settings(this::receive);
+        mMapSettings = new MapSettings(this::receive);
+        mMP3Settings = new MP3Settings(this::receive);
+        mPlaybackSettings = new PlaybackSettings(this::receive);
+        mPlaylistSettings = new PlaylistSettings(this::receive, mDirectorySettings);
+        mRadioReferenceSettings = new RadioReferenceSettings(this::receive);
+        mRecordSettings = new RecordSettings(this::receive);
+        mTalkgroupFormatSettings = new TalkgroupFormatSettings(this::receive);
+        mTunerSettings = new TunerSettings(this::receive);
+        mVectorCalibrationSettings = new VectorCalibrationSettings(this::receive);
+    }
+
+    /**
+     * Primary method for receiving notification from a managed setting that a setting type
+     * has been changed/updated.
+     *
+     * @param settingsType that is updated
+     */
+    @Override
+    public void receive(SettingsType settingsType)
+    {
+        MyEventBus.getGlobalEventBus().post(settingsType);
     }
 }

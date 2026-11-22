@@ -49,6 +49,7 @@ public class ChannelMetadata implements Listener<IdentifierUpdateNotification>, 
 {
     private final static Logger mLog = LoggerFactory.getLogger(ChannelMetadata.class);
 
+    private AliasListConfigurationIdentifier mAliasListConfigurationIdentifier;
     private SystemConfigurationIdentifier mSystemConfigurationIdentifier;
     private SiteConfigurationIdentifier mSiteConfigurationIdentifier;
     private ChannelNameConfigurationIdentifier mChannelNameConfigurationIdentifier;
@@ -127,6 +128,19 @@ public class ChannelMetadata implements Listener<IdentifierUpdateNotification>, 
     public Listener<IdentifierUpdateNotification> getIdentifierUpdateListener()
     {
         return this;
+    }
+
+    /**
+     * Alias list configuration identifier
+     */
+    public AliasListConfigurationIdentifier getAliasListConfigurationIdentifier()
+    {
+        return mAliasListConfigurationIdentifier;
+    }
+
+    public boolean hasAliasListConfigurationIdentifier()
+    {
+        return mAliasListConfigurationIdentifier != null;
     }
 
     /**
@@ -341,6 +355,15 @@ public class ChannelMetadata implements Listener<IdentifierUpdateNotification>, 
                 switch(identifier.getForm())
                 {
                     case ALIAS_LIST:
+                        if(identifier instanceof AliasListConfigurationIdentifier && (update.isAdd() || update.isSilentAdd()))
+                        {
+                            mAliasListConfigurationIdentifier = (AliasListConfigurationIdentifier)identifier;
+                        }
+                        else
+                        {
+                            mAliasListConfigurationIdentifier = null;
+                        }
+
                         if(update.isAdd())
                         {
                             mAliasList = mAliasModel.getAliasList((AliasListConfigurationIdentifier)identifier);
@@ -350,13 +373,16 @@ public class ChannelMetadata implements Listener<IdentifierUpdateNotification>, 
                                 if(mToIdentifier != null)
                                 {
                                     mToIdentifierAliases = mAliasList.getAliases(mToIdentifier);
+                                    broadcastUpdate(ChannelMetadataField.USER_TO);
                                 }
                                 if(mFromIdentifier != null)
                                 {
                                     mFromIdentifierAliases = mAliasList.getAliases(mFromIdentifier);
+                                    broadcastUpdate(ChannelMetadataField.USER_FROM);
                                 }
                             }
                         }
+                        broadcastUpdate(ChannelMetadataField.CONFIGURATION_ALIAS_LIST);
                         break;
                     case CHANNEL:
                         if(identifier instanceof ChannelNameConfigurationIdentifier && (update.isAdd() || update.isSilentAdd()))

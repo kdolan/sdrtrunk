@@ -36,12 +36,11 @@ import io.github.dsheirer.module.decode.p25.phase1.message.P25P1Message;
 import io.github.dsheirer.module.decode.p25.phase1.message.hdu.HDUMessage;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDU1Message;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDU2Message;
-import io.github.dsheirer.preference.UserPreferences;
+import io.github.dsheirer.settings.Settings;
 import io.github.dsheirer.source.config.SourceConfigTuner;
 import io.github.dsheirer.module.decode.p25.phase1.DecodeConfigP25Phase1;
 import io.github.dsheirer.module.decode.p25.phase1.Modulation;
 import io.github.dsheirer.module.decode.p25.audio.P25P1AudioModule;
-import io.github.dsheirer.preference.decoder.JmbeLibraryPreference;
 import io.github.dsheirer.sample.Listener;
 import io.github.dsheirer.sample.complex.ComplexSamples;
 import java.io.File;
@@ -96,8 +95,7 @@ public class PipelineReplayTest
         {
             try
             {
-                java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(
-                    io.github.dsheirer.preference.decoder.JmbeLibraryPreference.class);
+                java.util.prefs.Preferences prefs = io.github.dsheirer.settings.Setting.JMBE_LIBRARY_PATH.getNode();
                 prefs.put("path.jmbe.library.1.0.0", jmbePath);
                 prefs.flush();
             }
@@ -193,9 +191,9 @@ public class PipelineReplayTest
         ProcessingChain processingChain = new ProcessingChain(channel, aliasModel);
 
         // Create decoder modules via DecoderFactory (same as live system)
-        UserPreferences userPreferences = new UserPreferences();
+        Settings settings = new Settings();
         ChannelMapModel channelMapModel = new ChannelMapModel();
-        List<Module> modules = DecoderFactory.getModules(channelMapModel, channel, aliasModel, userPreferences, null, null);
+        List<Module> modules = DecoderFactory.getModules(channelMapModel, channel, aliasModel, settings, null, null);
         processingChain.addModules(modules);
 
         // Check JMBE codec status via reflection (hasAudioCodec is protected)
@@ -387,9 +385,9 @@ public class PipelineReplayTest
         AliasModel aliasModel = new AliasModel();
         ProcessingChain processingChain = new ProcessingChain(channel, aliasModel);
 
-        UserPreferences userPreferences = new UserPreferences();
+        Settings settings = new Settings();
         ChannelMapModel channelMapModel = new ChannelMapModel();
-        List<Module> modules = DecoderFactory.getModules(channelMapModel, channel, aliasModel, userPreferences, null, null);
+        List<Module> modules = DecoderFactory.getModules(channelMapModel, channel, aliasModel, settings, null, null);
         processingChain.addModules(modules);
 
         // Check JMBE

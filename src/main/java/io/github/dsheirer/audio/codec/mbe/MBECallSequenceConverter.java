@@ -27,7 +27,7 @@ import io.github.dsheirer.module.decode.p25.audio.P25P1AudioModule;
 import io.github.dsheirer.module.decode.p25.audio.P25P1CallSequenceRecorder;
 import io.github.dsheirer.module.decode.p25.identifier.radio.APCO25RadioIdentifier;
 import io.github.dsheirer.module.decode.p25.identifier.talkgroup.APCO25Talkgroup;
-import io.github.dsheirer.preference.UserPreferences;
+import io.github.dsheirer.settings.Settings;
 import io.github.dsheirer.record.AudioSegmentRecorder;
 import java.io.File;
 import java.io.IOException;
@@ -36,7 +36,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collection;
-import jmbe.iface.IAudioCodec;
+import jmbe.frame.CorrectedIMBEFrame;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.filefilter.DirectoryFileFilter;
 import org.apache.commons.io.filefilter.SuffixFileFilter;
@@ -75,7 +75,7 @@ public class MBECallSequenceConverter
         {
             if(callSequence.getProtocol().equals(P25P1CallSequenceRecorder.PROTOCOL))
             {
-                P25P1AudioModule audioModule = new P25P1AudioModule(new UserPreferences(), new AliasList("mbe generator"));
+                P25P1AudioModule audioModule = new P25P1AudioModule(new Settings(), new AliasList("mbe generator"));
                 audioModule.setRecordAudio(true);
                 audioModule.start();
 
@@ -111,12 +111,15 @@ public class MBECallSequenceConverter
                     }
                 }
 
-                IAudioCodec codec = audioModule.getAudioCodec();
+                boolean correctFrames = audioModule.isCorrectedFrameSupported();
 
                 for(VoiceFrame voiceFrame: callSequence.getVoiceFrames())
                 {
                     byte[] frameBytes = voiceFrame.getFrameBytes();
-                    float[] audio = codec.getAudio(frameBytes);
+
+                    //Only error correct the frame in sdrtrunk when the JMBE library (version 3+) can synthesize from it
+                    float[] audio = audioModule.getAudio(frameBytes,
+                        correctFrames ? CorrectedIMBEFrame.correct(frameBytes) : null);
                     audioModule.addAudio(audio);
                 }
 

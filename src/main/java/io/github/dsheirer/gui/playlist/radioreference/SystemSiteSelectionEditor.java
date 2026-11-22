@@ -24,7 +24,7 @@ package io.github.dsheirer.gui.playlist.radioreference;
 
 import com.google.common.collect.Ordering;
 import io.github.dsheirer.playlist.PlaylistManager;
-import io.github.dsheirer.preference.UserPreferences;
+import io.github.dsheirer.settings.Settings;
 import io.github.dsheirer.rrapi.type.Flavor;
 import io.github.dsheirer.rrapi.type.System;
 import io.github.dsheirer.rrapi.type.SystemInformation;
@@ -55,9 +55,11 @@ public class SystemSiteSelectionEditor extends GridPane
 {
     private static final Logger mLog = LoggerFactory.getLogger(SystemSiteSelectionEditor.class);
 
-    private UserPreferences mUserPreferences;
+    private Settings mSettings;
     private PlaylistManager mPlaylistManager;
     private ProgressIndicator mProgressIndicator;
+    private int mPendingSystemId = -1;
+    private int mPendingSiteId = -1;
     private Label mPlaceholderLabel;
     private Label mProtocolLabel;
     private Label mFlavorLabel;
@@ -70,12 +72,12 @@ public class SystemSiteSelectionEditor extends GridPane
 
     /**
      * Constructs an instance
-     * @param userPreferences for settings
+     * @param settings for settings
      * @param playlistManager to access radio reference
      */
-    public SystemSiteSelectionEditor(UserPreferences userPreferences, PlaylistManager playlistManager)
+    public SystemSiteSelectionEditor(Settings settings, PlaylistManager playlistManager)
     {
-        mUserPreferences = userPreferences;
+        mSettings = settings;
         mPlaylistManager = playlistManager;
 
         setPadding(new Insets(10,0,0,0));
@@ -132,6 +134,46 @@ public class SystemSiteSelectionEditor extends GridPane
         Collections.sort(sites, Ordering.natural());
         getSiteTableView().getItems().addAll(sites);
         setLoading(false);
+
+        if(system != null && system.getSystemId() == mPendingSystemId)
+        {
+            selectSite(mPendingSiteId);
+        }
+    }
+
+    /**
+     * Selects the site once the system is shown, or now when it's already shown.
+     * @param systemId of the system
+     * @param siteId to select, or -1 for none
+     */
+    public void viewSite(int systemId, int siteId)
+    {
+        if(mCurrentSystem != null && mCurrentSystem.getSystemId() == systemId &&
+            !getSiteTableView().getItems().isEmpty())
+        {
+            selectSite(siteId);
+        }
+        else
+        {
+            mPendingSystemId = systemId;
+            mPendingSiteId = siteId;
+        }
+    }
+
+    private void selectSite(int siteId)
+    {
+        mPendingSystemId = -1;
+        mPendingSiteId = -1;
+
+        for(EnrichedSite site: getSiteTableView().getItems())
+        {
+            if(site.getSite() != null && site.getSite().getSiteId() == siteId)
+            {
+                getSiteTableView().getSelectionModel().select(site);
+                getSiteTableView().scrollTo(site);
+                return;
+            }
+        }
     }
 
     public void clear()
@@ -152,7 +194,7 @@ public class SystemSiteSelectionEditor extends GridPane
     {
         if(mSiteEditor == null)
         {
-            mSiteEditor = new SiteEditor(mUserPreferences, mPlaylistManager);
+            mSiteEditor = new SiteEditor(mSettings, mPlaylistManager);
         }
 
         return mSiteEditor;

@@ -18,7 +18,7 @@
  */
 package io.github.dsheirer.source.tuner;
 
-import io.github.dsheirer.preference.source.ChannelizerType;
+import io.github.dsheirer.settings.source.ChannelizerType;
 import io.github.dsheirer.sample.Broadcaster;
 import io.github.dsheirer.sample.Listener;
 import io.github.dsheirer.source.ISourceEventProcessor;
@@ -89,6 +89,7 @@ public abstract class Tuner implements ISourceEventProcessor, ITunerErrorListene
             try
             {
                 getTunerController().start();
+                getTunerController().setSampleDropMonitorTunerName(getPreferredName());
             }
             catch(SourceException se)
             {

@@ -1,6 +1,6 @@
 /*
  * *****************************************************************************
- * Copyright (C) 2014-2024 Dennis Sheirer
+ * Copyright (C) 2014-2026 Dennis Sheirer
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,10 +30,11 @@ import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDU1Message;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDU2Message;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDUMessage;
 import io.github.dsheirer.module.decode.p25.phase1.P25PipelineDiagnostics;
-import io.github.dsheirer.preference.UserPreferences;
+import io.github.dsheirer.settings.Settings;
 import io.github.dsheirer.sample.Listener;
 import java.util.ArrayList;
 import java.util.List;
+import jmbe.frame.CorrectedIMBEFrame;
 
 public class P25P1AudioModule extends ImbeAudioModule
 {
@@ -80,9 +81,9 @@ public class P25P1AudioModule extends ImbeAudioModule
     private final SoftLimitedGain mGain = new SoftLimitedGain(2.0f, 0.8f, 0.95f);
     private List<LDUMessage> mCachedLDUMessages = new ArrayList<>();
 
-    public P25P1AudioModule(UserPreferences userPreferences, AliasList aliasList)
+    public P25P1AudioModule(Settings settings, AliasList aliasList)
     {
-        super(userPreferences, aliasList);
+        super(settings, aliasList);
     }
 
     /**
@@ -336,8 +337,14 @@ public class P25P1AudioModule extends ImbeAudioModule
                 return;
             }
 
-            for(byte[] frame : ldu.getIMBEFrames())
+            List<byte[]> frames = ldu.getIMBEFrames();
+
+            //Only error correct the frames in sdrtrunk when the JMBE library (version 3+) can synthesize from them
+            List<CorrectedIMBEFrame> correctedFrames = isCorrectedFrameSupported() ? ldu.getCorrectedIMBEFrames() : null;
+
+            for(int x = 0; x < frames.size(); x++)
             {
+                byte[] frame = frames.get(x);
                 mTotalFrameCount++;
 
                 // Pre-codec quality gate: check IMBE FEC errors before codec decode
@@ -385,7 +392,7 @@ public class P25P1AudioModule extends ImbeAudioModule
                 // Good frame passed the gate (or gate adaptively disabled) — reset consecutive counter
                 mConsecutiveGatedFrames = 0;
 
-                float[] audio = getAudioCodec().getAudio(frame);
+                float[] audio = getAudio(frame, correctedFrames != null ? correctedFrames.get(x) : null);
                 mLastGoodFrame = audio.clone();
                 addAudio(audio);
             }

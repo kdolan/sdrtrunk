@@ -24,6 +24,7 @@ import io.github.dsheirer.audio.broadcast.broadcastify.BroadcastifyCallConfigura
 import io.github.dsheirer.audio.broadcast.broadcastify.BroadcastifyFeedConfiguration;
 import io.github.dsheirer.audio.broadcast.rdioscanner.RdioScannerBroadcaster;
 import io.github.dsheirer.audio.broadcast.rdioscanner.RdioScannerConfiguration;
+import io.github.dsheirer.audio.broadcast.thinline.ThinlineRadioConfiguration;
 import io.github.dsheirer.audio.broadcast.rdioscanner.RdioScannerFeedConfiguration;
 import io.github.dsheirer.audio.broadcast.openmhz.OpenMHzBroadcaster;
 import io.github.dsheirer.audio.broadcast.openmhz.OpenMHzConfiguration;
@@ -40,7 +41,7 @@ import io.github.dsheirer.audio.convert.ISilenceGenerator;
 import io.github.dsheirer.audio.convert.InputAudioFormat;
 import io.github.dsheirer.audio.convert.MP3Setting;
 import io.github.dsheirer.audio.convert.MP3SilenceGenerator;
-import io.github.dsheirer.preference.UserPreferences;
+import io.github.dsheirer.settings.Settings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,12 +56,12 @@ public class BroadcastFactory
      * @return configured broadcaster or null
      */
     public static AbstractAudioBroadcaster getBroadcaster(BroadcastConfiguration configuration, AliasModel aliasModel,
-                                                          UserPreferences userPreferences)
+                                                          Settings settings)
     {
         if(configuration != null)
         {
-            InputAudioFormat inputAudioFormat = userPreferences.getMP3Preference().getAudioSampleRate();
-            MP3Setting mp3Setting = userPreferences.getMP3Preference().getMP3Setting();
+            InputAudioFormat inputAudioFormat = settings.getMP3Settings().getAudioSampleRate();
+            MP3Setting mp3Setting = settings.getMP3Settings().getMP3Setting();
 
             switch(configuration.getBroadcastServerType())
             {
@@ -68,6 +69,7 @@ public class BroadcastFactory
                     return new BroadcastifyCallBroadcaster((BroadcastifyCallConfiguration)configuration,
                             inputAudioFormat, mp3Setting, aliasModel);
                 case RDIOSCANNER_CALL:
+                case THINLINE_RADIO:
                     return new RdioScannerBroadcaster((RdioScannerConfiguration)configuration,
                             inputAudioFormat, mp3Setting, aliasModel);
                 case OPENMHZ:
@@ -113,6 +115,8 @@ public class BroadcastFactory
                 return new BroadcastifyCallConfiguration(format);
             case RDIOSCANNER_CALL:
                 return new RdioScannerConfiguration(format);
+            case THINLINE_RADIO:
+                return new ThinlineRadioConfiguration(format);
             case BROADCASTIFY:
                 return new BroadcastifyFeedConfiguration(format);
             case OPENMHZ:

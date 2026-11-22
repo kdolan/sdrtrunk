@@ -19,6 +19,7 @@
 
 package io.github.dsheirer.gui.playlist.radioreference;
 
+import com.google.common.eventbus.Subscribe;
 import io.github.dsheirer.controller.channel.Channel;
 import io.github.dsheirer.eventbus.MyEventBus;
 import io.github.dsheirer.gui.playlist.channel.ViewChannelRequest;
@@ -30,12 +31,13 @@ import io.github.dsheirer.module.decode.nxdn.layer3.type.TransmissionMode;
 import io.github.dsheirer.module.decode.p25.phase1.DecodeConfigP25Phase1;
 import io.github.dsheirer.module.decode.p25.phase1.Modulation;
 import io.github.dsheirer.playlist.PlaylistManager;
-import io.github.dsheirer.preference.UserPreferences;
+import io.github.dsheirer.settings.Settings;
 import io.github.dsheirer.rrapi.type.Category;
 import io.github.dsheirer.rrapi.type.Frequency;
 import io.github.dsheirer.rrapi.type.Mode;
 import io.github.dsheirer.rrapi.type.SubCategory;
 import io.github.dsheirer.service.radioreference.RadioReference;
+import io.github.dsheirer.settings.SettingsType;
 import io.github.dsheirer.source.config.SourceConfigTuner;
 import io.github.dsheirer.util.ThreadPool;
 import java.text.DecimalFormat;
@@ -60,7 +62,7 @@ public class FrequencyEditor extends VBox
 {
     private static final Logger mLog = LoggerFactory.getLogger(FrequencyEditor.class);
     private final DecimalFormat FREQUENCY_FORMATTER = new DecimalFormat("0.00000");
-    private UserPreferences mUserPreferences;
+    private Settings mSettings;
     private RadioReference mRadioReference;
     private PlaylistManager mPlaylistManager;
     private Level mLevel;
@@ -78,13 +80,14 @@ public class FrequencyEditor extends VBox
     private ModeDecoderType mModeDecoderType;
     private long mFrequency;
 
-    public FrequencyEditor(UserPreferences userPreferences, RadioReference radioReference,
+    public FrequencyEditor(Settings settings, RadioReference radioReference,
                            PlaylistManager playlistManager, Level level)
     {
-        mUserPreferences = userPreferences;
+        mSettings = settings;
         mRadioReference = radioReference;
         mPlaylistManager = playlistManager;
         mLevel = level;
+        MyEventBus.getGlobalEventBus().register(this);
 
         GridPane gridPane = new GridPane();
         gridPane.setVgap(5);
@@ -204,7 +207,7 @@ public class FrequencyEditor extends VBox
 
         if(item != null)
         {
-            mFrequency = (long)(item.getDownlink() * 1E6);
+            mFrequency = item.getDownlinkHz();
             getAlphaTagTextField().setText(item.getAlphaTag());
             getFrequencyTextField().setText(FREQUENCY_FORMATTER.format(item.getDownlink()));
             getToneTextField().setText(item.getTone());
@@ -344,12 +347,12 @@ public class FrequencyEditor extends VBox
     {
         if(mShowCreatedChannelCheckBox == null)
         {
-            boolean show = mUserPreferences.getRadioReferencePreference().getShowChannelEditor(mLevel);
+            boolean show = mSettings.getRadioReferenceSettings().getShowChannelEditor(mLevel);
             mShowCreatedChannelCheckBox = new CheckBox("View Channel Editor After Create");
             mShowCreatedChannelCheckBox.setDisable(true);
             mShowCreatedChannelCheckBox.selectedProperty().set(show);
             mShowCreatedChannelCheckBox.selectedProperty()
-                .addListener((observable, oldValue, newValue) -> mUserPreferences.getRadioReferencePreference()
+                .addListener((observable, oldValue, newValue) -> mSettings.getRadioReferenceSettings()
                     .setShowChannelEditor(newValue, mLevel));
         }
 
@@ -413,46 +416,7 @@ public class FrequencyEditor extends VBox
      */
     private Channel createChannel(ModeDecoderType modeDecoderType, long frequency, String system, String site, String name)
     {
-        if(modeDecoderType.hasDecoderType())
-        {
-            Channel channel = new Channel();
-            channel.setSystem(system);
-            channel.setSite(site);
-            channel.setName(name);
-            SourceConfigTuner sourceConfigTuner = new SourceConfigTuner();
-            sourceConfigTuner.setFrequency(frequency);
-            channel.setSourceConfiguration(sourceConfigTuner);
-            DecodeConfiguration decodeConfiguration = DecoderFactory.getDecodeConfiguration(modeDecoderType.getDecoderType());
-
-            if(decodeConfiguration instanceof DecodeConfigNBFM && modeDecoderType == ModeDecoderType.FM)
-            {
-                ((DecodeConfigNBFM)decodeConfiguration).setBandwidth(DecodeConfigNBFM.Bandwidth.BW_25_0);
-            }
-            else if(decodeConfiguration instanceof DecodeConfigP25Phase1)
-            {
-                ((DecodeConfigP25Phase1)decodeConfiguration).setModulation(Modulation.C4FM);
-            }
-            else if(decodeConfiguration instanceof DecodeConfigNXDN nxdn)
-            {
-                if(modeDecoderType == ModeDecoderType.NXDN48)
-                {
-                    nxdn.setTransmissionMode(TransmissionMode.M4800);
-                }
-                else if(modeDecoderType == ModeDecoderType.NXDN96)
-                {
-                    nxdn.setTransmissionMode(TransmissionMode.M9600);
-                }
-            }
-
-            channel.setDecodeConfiguration(decodeConfiguration);
-            return channel;
-        }
-        else
-        {
-            mLog.warn("Can't create channel configuration for [" + modeDecoderType.name() + "] no supported decoder type");
-        }
-
-        return null;
+        return RadioReferenceChannelFactory.conventional(modeDecoderType, frequency, system, site, name);
     }
 
     private TextField getSystemTextField()
@@ -501,5 +465,17 @@ public class FrequencyEditor extends VBox
         }
 
         return mDecoderTextField;
+    }
+
+    /**
+     * Follows changes to this setting made on the settings dialog's Radio Reference page
+     */
+    @Subscribe
+    public void settingsUpdated(SettingsType settingsType)
+    {
+        if(settingsType == SettingsType.RADIO_REFERENCE)
+        {
+            Platform.runLater(() -> getShowCreatedChannelCheckBox().setSelected(mSettings.getRadioReferenceSettings().getShowChannelEditor(mLevel)));
+        }
     }
 }

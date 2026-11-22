@@ -20,7 +20,7 @@
 package io.github.dsheirer.gui.playlist.radioreference;
 
 import io.github.dsheirer.playlist.PlaylistManager;
-import io.github.dsheirer.preference.UserPreferences;
+import io.github.dsheirer.settings.Settings;
 import io.github.dsheirer.rrapi.type.Agency;
 import io.github.dsheirer.rrapi.type.AgencyInfo;
 import io.github.dsheirer.rrapi.type.CountyInfo;
@@ -39,7 +39,6 @@ import javafx.scene.layout.VBox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
@@ -49,24 +48,26 @@ import java.util.List;
 public class AgencyEditor extends VBox
 {
     private static final Logger mLog = LoggerFactory.getLogger(AgencyEditor.class);
-    private UserPreferences mUserPreferences;
+    private Settings mSettings;
     private RadioReference mRadioReference;
     private PlaylistManager mPlaylistManager;
     private Level mLevel;
     private ListView<Agency> mAgencyListView;
     private AgencyFrequencyEditor mAgencyFrequencyEditor;
     private IntegerProperty mAgencyCountProperty = new SimpleIntegerProperty();
+    private Integer mPendingAgencyId;
+    private AgencyFrequencyEditor.FrequencyTarget mPendingFrequency;
 
     /**
      * Constructs an instance
-     * @param userPreferences
+     * @param settings
      * @param radioReference
      * @param level
      */
-    public AgencyEditor(UserPreferences userPreferences, RadioReference radioReference,
+    public AgencyEditor(Settings settings, RadioReference radioReference,
                         PlaylistManager playlistManager, Level level)
     {
-        mUserPreferences = userPreferences;
+        mSettings = settings;
         mRadioReference = radioReference;
         mPlaylistManager = playlistManager;
         mLevel = level;
@@ -92,10 +93,11 @@ public class AgencyEditor extends VBox
 
         if(agencies != null && !agencies.isEmpty())
         {
-            Collections.sort(agencies, new AgencyComparator());
+            //The agencies list belongs to a cached state or county info shared with other callers, so sort the items
             getAgencyListView().getItems().addAll(agencies);
+            getAgencyListView().getItems().sort(new AgencyComparator());
 
-            int preferredAgencyId = mUserPreferences.getRadioReferencePreference().getPreferredAgencyId(mLevel);
+            int preferredAgencyId = mSettings.getRadioReferenceSettings().getPreferredAgencyId(mLevel);
 
             for(Agency agency: getAgencyListView().getItems())
             {
@@ -107,6 +109,56 @@ public class AgencyEditor extends VBox
                 }
             }
         }
+    }
+
+    /**
+     * Prepares to show the agency with the frequency selected when the agencies are next set
+     * @param agencyId of the agency, or the negative county id for a county's own frequencies
+     * @param frequency to select, or null
+     */
+    public void prepareView(int agencyId, AgencyFrequencyEditor.FrequencyTarget frequency)
+    {
+        mSettings.getRadioReferenceSettings().setPreferredAgencyId(agencyId, mLevel);
+        mPendingAgencyId = agencyId;
+        mPendingFrequency = frequency;
+    }
+
+    /**
+     * Shows the agency with the frequency selected
+     * @param agencyId of the agency, or the negative county id for a county's own frequencies
+     * @param frequency to select, or null
+     * @return false when the editor doesn't list the agency
+     */
+    public boolean view(int agencyId, AgencyFrequencyEditor.FrequencyTarget frequency)
+    {
+        prepareView(agencyId, frequency);
+
+        for(Agency agency: getAgencyListView().getItems())
+        {
+            if(agency.getAgencyId() == agencyId)
+            {
+                if(getAgencyListView().getSelectionModel().getSelectedItem() == agency)
+                {
+                    //Already shown - select the frequency in the shown categories
+                    mPendingAgencyId = null;
+                    mPendingFrequency = null;
+
+                    if(frequency != null)
+                    {
+                        getAgencyFrequencyEditor().viewFrequency(frequency);
+                    }
+                }
+                else
+                {
+                    getAgencyListView().getSelectionModel().select(agency);
+                }
+
+                getAgencyListView().scrollTo(agency);
+                return true;
+            }
+        }
+
+        return getAgencyListView().getItems().isEmpty();
     }
 
     public void clear()
@@ -127,7 +179,7 @@ public class AgencyEditor extends VBox
     {
         if(mAgencyFrequencyEditor == null)
         {
-            mAgencyFrequencyEditor = new AgencyFrequencyEditor(mUserPreferences, mRadioReference, mPlaylistManager, mLevel);
+            mAgencyFrequencyEditor = new AgencyFrequencyEditor(mSettings, mRadioReference, mPlaylistManager, mLevel);
         }
 
         return mAgencyFrequencyEditor;
@@ -155,7 +207,18 @@ public class AgencyEditor extends VBox
         {
             getAgencyFrequencyEditor().clearAndSetLoading();
 
-            mUserPreferences.getRadioReferencePreference().setPreferredAgencyId(agency.getAgencyId(), mLevel);
+            if(mPendingAgencyId != null && mPendingAgencyId == agency.getAgencyId())
+            {
+                if(mPendingFrequency != null)
+                {
+                    getAgencyFrequencyEditor().viewFrequency(mPendingFrequency);
+                }
+
+                mPendingAgencyId = null;
+                mPendingFrequency = null;
+            }
+
+            mSettings.getRadioReferenceSettings().setPreferredAgencyId(agency.getAgencyId(), mLevel);
 
             ThreadPool.CACHED.submit(() -> {
                 try

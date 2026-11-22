@@ -21,7 +21,7 @@ package io.github.dsheirer.gui.playlist.channel;
 
 import io.github.dsheirer.gui.control.AccessibilityUtil;
 import io.github.dsheirer.gui.control.AccessibleToggleSwitch;
-import io.github.dsheirer.gui.control.DbPowerMeter;
+import io.github.dsheirer.gui.power.PowerMeter;
 import io.github.dsheirer.gui.control.HexFormatter;
 import io.github.dsheirer.gui.control.IntegerFormatter;
 import io.github.dsheirer.gui.playlist.eventlog.EventLogConfigurationEditor;
@@ -35,8 +35,8 @@ import io.github.dsheirer.module.decode.nbfm.DecodeConfigNBFM;
 import io.github.dsheirer.module.log.EventLogType;
 import io.github.dsheirer.module.log.config.EventLogConfiguration;
 import io.github.dsheirer.playlist.PlaylistManager;
-import io.github.dsheirer.preference.UserPreferences;
-import io.github.dsheirer.preference.identifier.IntegerFormat;
+import io.github.dsheirer.settings.Settings;
+import io.github.dsheirer.settings.identifier.IntegerFormat;
 import io.github.dsheirer.protocol.Protocol;
 import io.github.dsheirer.record.RecorderType;
 import io.github.dsheirer.record.config.RecordConfiguration;
@@ -83,8 +83,8 @@ public class AMConfigurationEditor extends ChannelConfigurationEditor
     private TextField mSquelchThresholdField;
     private ToggleSwitch mSquelchAutoTrackSwitch;
     private TextFormatter<Integer> mTalkgroupTextFormatter;
-    private IntegerFormatter mSquelchTextFormatter = new IntegerFormatter((int)DbPowerMeter.DEFAULT_MINIMUM_POWER,
-            (int)DbPowerMeter.DEFAULT_MAXIMUM_POWER);
+    private IntegerFormatter mSquelchTextFormatter = new IntegerFormatter((int)PowerMeter.DEFAULT_MINIMUM_POWER,
+            (int)PowerMeter.DEFAULT_MAXIMUM_POWER);
     private EventLogConfigurationEditor mEventLogConfigurationEditor;
     private TalkgroupValueChangeListener mTalkgroupValueChangeListener = new TalkgroupValueChangeListener();
     private IntegerFormatter mDecimalFormatter = new IntegerFormatter(1, 65535);
@@ -94,12 +94,12 @@ public class AMConfigurationEditor extends ChannelConfigurationEditor
      * Constructs an instance
      * @param playlistManager for playlists
      * @param tunerManager for tuners
-     * @param userPreferences for preferences
+     * @param settings for preferences
      */
     public AMConfigurationEditor(PlaylistManager playlistManager, TunerManager tunerManager,
-                                 UserPreferences userPreferences, IFilterProcessor filterProcessor)
+                                 Settings settings, IFilterProcessor filterProcessor)
     {
-        super(playlistManager, tunerManager, userPreferences, filterProcessor);
+        super(playlistManager, tunerManager, settings, filterProcessor);
         getTitledPanesBox().getChildren().add(getSourcePane());
         getTitledPanesBox().getChildren().add(getDecoderPane());
         getTitledPanesBox().getChildren().add(getEventLogPane());
@@ -429,7 +429,7 @@ public class AMConfigurationEditor extends ChannelConfigurationEditor
             mTalkgroupTextFormatter.valueProperty().removeListener(mTalkgroupValueChangeListener);
         }
 
-        IntegerFormat format = mUserPreferences.getTalkgroupFormatPreference().getTalkgroupFormat(Protocol.AM);
+        IntegerFormat format = mSettings.getTalkgroupFormatSettings().getTalkgroupFormat(Protocol.AM);
 
         if(format == null)
         {

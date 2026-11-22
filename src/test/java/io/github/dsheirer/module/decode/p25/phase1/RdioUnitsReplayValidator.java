@@ -27,7 +27,7 @@ import io.github.dsheirer.identifier.Identifier;
 import io.github.dsheirer.module.Module;
 import io.github.dsheirer.module.ProcessingChain;
 import io.github.dsheirer.module.decode.DecoderFactory;
-import io.github.dsheirer.preference.UserPreferences;
+import io.github.dsheirer.settings.Settings;
 import io.github.dsheirer.source.config.SourceConfigTuner;
 import java.io.File;
 import java.util.ArrayList;
@@ -75,8 +75,7 @@ public class RdioUnitsReplayValidator
         {
             try
             {
-                java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(
-                    io.github.dsheirer.preference.decoder.JmbeLibraryPreference.class);
+                java.util.prefs.Preferences prefs = io.github.dsheirer.settings.Setting.JMBE_LIBRARY_PATH.getNode();
                 prefs.put("path.jmbe.library.1.0.0", jmbePath);
                 prefs.flush();
             }
@@ -182,9 +181,9 @@ public class RdioUnitsReplayValidator
         AliasModel aliasModel = new AliasModel();
         ProcessingChain processingChain = new ProcessingChain(channel, aliasModel);
 
-        UserPreferences userPreferences = new UserPreferences();
+        Settings settings = new Settings();
         ChannelMapModel channelMapModel = new ChannelMapModel();
-        List<Module> modules = DecoderFactory.getModules(channelMapModel, channel, aliasModel, userPreferences, null, null);
+        List<Module> modules = DecoderFactory.getModules(channelMapModel, channel, aliasModel, settings, null, null);
         processingChain.addModules(modules);
 
         List<AudioSegment> captured = new CopyOnWriteArrayList<>();
