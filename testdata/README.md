@@ -28,12 +28,15 @@ gated metrics carry **zero tolerance**:
 
 | Metric | Rule |
 |---|---|
-| `ldu_count` | must not decrease |
+| `ldu_count` | must not decrease. Voice LDUs only: a TDU that DUID correction rewrote as an LDU is reported as `corrected_ldu`, because the live audio module silences it |
 | `valid_messages` | must not decrease |
 | `audio_seconds` | must not decrease by more than 1% |
 | MDC CRC-valid bursts (per file) | must not decrease |
 
-Everything else — `sync_blocked`, `bit_errors`, `sync_losses`, `total_messages`, `audio_segments`,
+The baseline was last reset on 2026-11-22 from the build running live then, when `ldu_count` stopped counting
+corrected TDUs (180 of the previous 869). The audio metrics skip corrected LDUs for the same reason.
+
+Everything else — `corrected_ldu`, `sync_blocked`, `bit_errors`, `sync_losses`, `total_messages`, `audio_segments`,
 `quality_score` — is printed with its delta but never fails the run. Read those: they are how you
 tell a real improvement from a shift in behaviour.
 

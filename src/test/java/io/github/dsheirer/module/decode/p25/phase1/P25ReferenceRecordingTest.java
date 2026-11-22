@@ -64,7 +64,8 @@ public class P25ReferenceRecordingTest
      */
     static class Result
     {
-        int validLdu;
+        int validLdu; //Voice LDUs, excluding the DUID-corrected ones
+        int correctedLdu; //TDUs that the framer rewrote as LDUs (DUID correction)
         int hdu;
         int clearLdu2;
         int encryptedLdu2;
@@ -76,7 +77,7 @@ public class P25ReferenceRecordingTest
         @Override
         public String toString()
         {
-            return "validLDU=" + validLdu + " HDU=" + hdu + " clearLDU2=" + clearLdu2 + " encryptedLDU2=" +
+            return "validLDU=" + validLdu + " correctedLDU=" + correctedLdu + " HDU=" + hdu + " clearLDU2=" + clearLdu2 + " encryptedLDU2=" +
                     encryptedLdu2 + " foreignNAC=" + foreignNac + " garbageLDU=" + garbageLdu;
         }
     }
@@ -219,7 +220,13 @@ public class P25ReferenceRecordingTest
                 result.hdu++;
             }
 
-            if(message instanceof LDUMessage ldu && ldu.isValid())
+            //A DUID-corrected LDU is a TDU that the framer rewrote as an LDU.  The live audio module silences it, so
+            //it's counted separately rather than as a voice frame.
+            if(message instanceof LDUMessage corrected && corrected.isValid() && corrected.isDuidCorrected())
+            {
+                result.correctedLdu++;
+            }
+            else if(message instanceof LDUMessage ldu && ldu.isValid())
             {
                 result.validLdu++;
 
@@ -271,7 +278,7 @@ public class P25ReferenceRecordingTest
      */
     private static void assertRaymondPD(Result r)
     {
-        assertTrue(r.validLdu >= 20, "Expected the full call (>= 20 valid LDUs): " + r);
+        assertTrue(r.validLdu >= 15, "Expected the full call (16 voice LDUs, floor 15): " + r);
         assertTrue(r.hdu >= 1, "Expected the call header (HDU): " + r);
         assertTrue(r.clearLdu2 >= 8, "Expected clear LDU2 encryption sync on a clean signal: " + r);
         assertEquals(0, r.encryptedLdu2, "Channel is never encrypted: " + r);
@@ -292,30 +299,33 @@ public class P25ReferenceRecordingTest
 
     /**
      * Rock County PD W collection (2026-11-12 to 2026-11-19, ~29 dB, centred): long keyups, short bursts and rapid
-     * back-and-forth exchanges.  Each floor is ~90% of the valid LDUs CQPSK decoded on 2026-11-21.  The two short
+     * back-and-forth exchanges.  Each floor is ~90% of the voice LDUs CQPSK decoded on 2026-11-22, which exclude TDUs
+     * that DUID correction rewrote as LDUs.  Four of the short recordings (all but short_20261113_172118) are
+     * signalling bursts of back-to-back TDUs with 1 or 2 voice LDUs: their floors were 14 to 27 while unlimited DUID
+     * correction turned the TDUs into LDUs.  The two short
      * signalling bursts (TDUs and TSBKs, no voice) are tested by rockCountyPDWSignallingBursts, and the off-frequency
      * recordings by P25P1LSMFrequencyAmbiguityTest.
      */
     private static final String[][] ROCK_COUNTY_PD_W_COLLECTION = {
-        {"long/long_20261112_130208_2.5-37.5s_154815000_baseband.wav", "172"},
-        {"long/long_20261113_114157_2.9-46.0s_154815000_baseband.wav", "168"},
-        {"long/long_20261114_202546_0.3-57.1s_154815000_baseband.wav", "266"},
-        {"long/long_20261115_154857_0.0-37.3s_154815000_baseband.wav", "91"},
-        {"long/long_20261116_124620_0.2-35.5s_154815000_baseband.wav", "175"},
-        {"long/long_20261117_194143_1.9-40.4s_154815000_baseband.wav", "185"},
-        {"long/long_20261119_160807_3.0-47.8s_154815000_baseband.wav", "207"},
-        {"short/short_20261112_194046_2.9-13.3s_154815000_baseband.wav", "27"},
+        {"long/long_20261112_130208_2.5-37.5s_154815000_baseband.wav", "139"},
+        {"long/long_20261113_114157_2.9-46.0s_154815000_baseband.wav", "146"},
+        {"long/long_20261114_202546_0.3-57.1s_154815000_baseband.wav", "201"},
+        {"long/long_20261115_154857_0.0-37.3s_154815000_baseband.wav", "63"},
+        {"long/long_20261116_124620_0.2-35.5s_154815000_baseband.wav", "137"},
+        {"long/long_20261117_194143_1.9-40.4s_154815000_baseband.wav", "146"},
+        {"long/long_20261119_160807_3.0-47.8s_154815000_baseband.wav", "153"},
+        {"short/short_20261112_194046_2.9-13.3s_154815000_baseband.wav", "0"},
         {"short/short_20261113_172118_1.3-3.6s_154815000_baseband.wav", "9"},
-        {"short/short_20261114_040030_1.8-5.8s_154815000_baseband.wav", "14"},
-        {"short/short_20261115_224411_1.3-5.4s_154815000_baseband.wav", "15"},
-        {"short/short_20261118_224522_2.9-6.9s_154815000_baseband.wav", "14"},
-        {"rapid/rapid_20261112_182227_2.9-48.0s_154815000_baseband.wav", "171"},
-        {"rapid/rapid_20261113_090154_2.9-33.1s_154815000_baseband.wav", "131"},
-        {"rapid/rapid_20261114_150713_2.9-29.9s_154815000_baseband.wav", "121"},
-        {"rapid/rapid_20261115_235615_3.0-29.6s_154815000_baseband.wav", "117"},
-        {"rapid/rapid_20261116_200154_3.0-39.9s_154815000_baseband.wav", "176"},
-        {"rapid/rapid_20261118_180405_0.0-42.5s_154815000_baseband.wav", "143"},
-        {"rapid/rapid_20261119_120004_2.9-35.1s_154815000_baseband.wav", "116"},
+        {"short/short_20261114_040030_1.8-5.8s_154815000_baseband.wav", "0"},
+        {"short/short_20261115_224411_1.3-5.4s_154815000_baseband.wav", "1"},
+        {"short/short_20261118_224522_2.9-6.9s_154815000_baseband.wav", "0"},
+        {"rapid/rapid_20261112_182227_2.9-48.0s_154815000_baseband.wav", "101"},
+        {"rapid/rapid_20261113_090154_2.9-33.1s_154815000_baseband.wav", "62"},
+        {"rapid/rapid_20261114_150713_2.9-29.9s_154815000_baseband.wav", "60"},
+        {"rapid/rapid_20261115_235615_3.0-29.6s_154815000_baseband.wav", "52"},
+        {"rapid/rapid_20261116_200154_3.0-39.9s_154815000_baseband.wav", "89"},
+        {"rapid/rapid_20261118_180405_0.0-42.5s_154815000_baseband.wav", "83"},
+        {"rapid/rapid_20261119_120004_2.9-35.1s_154815000_baseband.wav", "54"},
     };
 
     @Test
@@ -391,7 +401,7 @@ public class P25ReferenceRecordingTest
     public void rockCountyPDWCQPSK() throws Exception
     {
         Result r = decode(ROCK_COUNTY_PD_W, ROCK_COUNTY_PD_W_NAC, P25ReferenceRecordingTest::cqpsk);
-        assertTrue(r.validLdu >= 80, "Expected the full transmission (>= 80 valid LDUs): " + r);
+        assertTrue(r.validLdu >= 67, "Expected the full transmission (74 voice LDUs, floor 67): " + r);
         assertTrue(r.clearLdu2 >= 35, "Expected clear LDU2 encryption sync on a clean signal: " + r);
         assertEquals(0, r.encryptedLdu2, "Channel is never encrypted: " + r);
         assertEquals(0, r.foreignNac, "Unexpected NAC in the decode: " + r);

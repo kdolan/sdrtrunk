@@ -81,7 +81,7 @@ public class P25P1LSMFrequencyAmbiguityTest
         decoder.setConfiguredNAC(NAC);
         decoder.getMessageFramer().setMaxBchErrors(DecodeConfigP25Phase1.MAX_BCH_ERRORS_DEFAULT);
         decoder.setMessageListener(m -> {
-            if(m instanceof LDUMessage l && l.isValid())
+            if(m instanceof LDUMessage l && l.isValid() && !l.isDuidCorrected()) //Voice LDUs: DUID-corrected TDUs are silenced live
             {
                 ldu[0]++;
             }
@@ -206,12 +206,12 @@ public class P25P1LSMFrequencyAmbiguityTest
     public void liveOffFrequencyRecordings() throws Exception
     {
         Run alias = decode(ALIAS, 0, 0);
-        assertTrue(alias.validLdu() >= 40, "False lock recording decodes: " + alias.validLdu());
+        assertTrue(alias.validLdu() >= 22, "False lock recording decodes: " + alias.validLdu());
         assertTrue(alias.medianRequest() < -3800, "False lock recording requests a ~-4.8 kHz correction: " +
                 alias.medianRequest());
 
         Run offset = decode(OFFSET_2500, 0, 0);
-        assertTrue(offset.validLdu() >= 30, "2.5 kHz off recording decodes: " + offset.validLdu());
+        assertTrue(offset.validLdu() >= 16, "2.5 kHz off recording decodes: " + offset.validLdu());
         assertEquals(-2500, offset.medianRequest(), 500, "2.5 kHz off recording requests ~-2.5 kHz");
     }
 
@@ -225,7 +225,8 @@ public class P25P1LSMFrequencyAmbiguityTest
         double residual = 4800 + run.finalCorrection();
         assertTrue(Math.abs(residual) < 300, "Residual offset after the loop converges: " + residual + " Hz");
         System.out.println("Closed loop from +4800 Hz: residual " + residual + " Hz, " + run.validLdu() + " valid LDUs");
-        //205 valid LDUs on 2026-11-21 (296 unshifted): decoding dips while the walk passes the filter edges
-        assertTrue(run.validLdu() >= 180, "Keeps decoding while the loop converges: " + run.validLdu());
+        //122 voice LDUs on 2026-11-22, excluding DUID-corrected TDUs (205 when they counted): decoding dips while
+        //the walk passes the filter edges
+        assertTrue(run.validLdu() >= 110, "Keeps decoding while the loop converges: " + run.validLdu());
     }
 }

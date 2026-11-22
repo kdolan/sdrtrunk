@@ -59,7 +59,7 @@ public class RegressionRunner
     private static final double AUDIO_TOLERANCE = 0.01;
 
     /** Reported on every file; only the gated subset below can fail the run. */
-    private static final String[] REPORTED = {"ldu_count", "valid_messages", "total_messages",
+    private static final String[] REPORTED = {"ldu_count", "corrected_ldu", "valid_messages", "total_messages",
         "sync_blocked", "bit_errors", "sync_losses", "audio_seconds", "audio_segments", "quality_score"};
 
     /** Integer counters where any decrease is a regression. */

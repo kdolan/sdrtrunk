@@ -99,6 +99,18 @@ public class P25P1DecoderLSM extends FeedbackDecoder implements IByteBufferProvi
         mMessageProcessor.setMessageListener(getMessageListener());
         mMessageFramer.setPhaseWrappedSoftSymbols(true);
         mMessageFramer.mPreemptiveSyncEnabled = false;
+        // Limit consecutive DUID corrections.  Without preemptive sync, each TDU corrected to an LDU swallows the next
+        // 11 TDUs, so with no limit a simulcast repeater's 2-2.5 s TDU burst after a call became 2.5 s of rewritten
+        // noise LDUs: silence appended to the call, a late call end and the terminators never seen.  A limit of 1
+        // keeps the single correction that holds framing through a misread mid-call TDU and accepts the second.
+        // On the Rock County PD W collection it decodes 1796 voice LDUs versus 1790 with no limit, and recovers 6672 of
+        // the 7534 terminator and signalling messages that the unlimited correction swallowed.
+        // System property p25.duid.limit.cqpsk: 0 = unlimited (previous behaviour), default = 1
+        int duidLimit = Integer.getInteger("p25.duid.limit.cqpsk", 1);
+        if(duidLimit > 0)
+        {
+            mMessageFramer.setMaxConsecutiveDuidCorrections(duidLimit);
+        }
         mSymbolProcessor = new P25P1SymbolProcessorLSM(this, mMessageFramer);
     }
 

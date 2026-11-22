@@ -61,7 +61,7 @@ import org.w3c.dom.NodeList;
 public class DecodeQualityTest
 {
     record ChannelConfig(String name, String system, String site, long frequency, String modulation, int nac, String preferredTuner) {}
-    record DecodeResult(int lduCount, int validMessages, int totalMessages, int syncBlockedCount, int bitErrors, int syncLosses, double signalSeconds, double totalFileSeconds, IMBEDiagSummary diagSummary) {}
+    record DecodeResult(int lduCount, int validMessages, int totalMessages, int syncBlockedCount, int bitErrors, int syncLosses, double signalSeconds, double totalFileSeconds, IMBEDiagSummary diagSummary, int correctedLduCount) {}
     record IMBEDiagSummary(int totalFrames, int totalErrors, int uncorrectableFrames, int invalidFundamentals,
                            double avgErrorsPerFrame, int maxFrameErrors, int[] errorDistribution) {}
     record AudioResult(int segmentCount, double totalSeconds, double silenceSeconds, double silencePercentage,
@@ -248,7 +248,7 @@ public class DecodeQualityTest
                 "  {\"file\": \"%s\", \"channel\": \"%s\", \"system\": \"%s\", \"site\": \"%s\", " +
                 "\"modulation\": \"%s\", \"nac\": %d, \"tuner\": \"%s\", \"is_fd\": %s, " +
                 "\"ldu_count\": %d, \"valid_messages\": %d, \"total_messages\": %d, \"sync_blocked\": %d, " +
-                "\"bit_errors\": %d, \"sync_losses\": %d, \"audio_seconds\": %.2f, \"audio_segments\": %d, " +
+                "\"corrected_ldu\": %d, \"bit_errors\": %d, \"sync_losses\": %d, \"audio_seconds\": %.2f, \"audio_segments\": %d, " +
                 "\"silence_seconds\": %.2f, \"silence_percentage\": %.2f, \"silence_region_count\": %d, " +
                 "\"artifact_frames\": %d, \"artifact_seconds\": %.2f, \"artifact_percentage\": %.2f, " +
                 "\"speech_frames\": %d, \"speech_percentage\": %.2f, \"quality_score\": %.4f, " +
@@ -256,7 +256,7 @@ public class DecodeQualityTest
                 escapeJson(bbFile.getName()), escapeJson(channelName), escapeJson(system), escapeJson(site),
                 modulation, nac, escapeJson(tuner), isFD,
                 result.lduCount, result.validMessages, result.totalMessages, result.syncBlockedCount,
-                result.bitErrors, result.syncLosses, audioSeconds, audioSegments,
+                result.correctedLduCount, result.bitErrors, result.syncLosses, audioSeconds, audioSegments,
                 silenceSeconds, silencePercentage, silenceRegionCount,
                 artifactFrames, artifactSeconds, artifactPercentage,
                 speechFrames, speechPercentage, qualityScore,
@@ -359,7 +359,7 @@ public class DecodeQualityTest
 
     private static DecodeResult runDecode(File file, String modulation, int nac, boolean diagEnabled, int maxBchErrors, float cmaAcqMu, float cmaTrkMu, int cmaShiftMs, String[] framerDiagHolder, boolean verbose)
     {
-        int[] ldu = {0}, valid = {0}, total = {0}, bitErr = {0}, syncLoss = {0};
+        int[] ldu = {0}, valid = {0}, total = {0}, bitErr = {0}, syncLoss = {0}, correctedLdu = {0};
         double[] signalSeconds = {0}, totalFileSeconds = {0};
         Map<String, int[]> duidCounts = new HashMap<>();
         Map<String, int[]> nacCounts = new HashMap<>();
@@ -393,7 +393,9 @@ public class DecodeQualityTest
                     if(duid == P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_1 ||
                        duid == P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_2)
                     {
-                        ldu[0]++;
+                        //A DUID-corrected LDU is a TDU the framer rewrote as an LDU.  The live audio module silences it, so it
+                        //isn't a voice frame: count it separately.
+                        if(p.isDuidCorrected()) correctedLdu[0]++; else ldu[0]++;
 
                         // Run IMBE diagnostic on valid LDUs
                         if(diagEnabled && msg instanceof LDUMessage lduMsg)
@@ -531,7 +533,7 @@ public class DecodeQualityTest
                 diagInvalidFund[0], (double)diagTotalErrors[0] / diagTotalFrames[0], diagMaxFrameErrors[0], diagErrorDist);
         }
 
-        return new DecodeResult(ldu[0], valid[0], total[0], syncBlocked, bitErr[0], syncLoss[0], signalSeconds[0], totalFileSeconds[0], diagSummary);
+        return new DecodeResult(ldu[0], valid[0], total[0], syncBlocked, bitErr[0], syncLoss[0], signalSeconds[0], totalFileSeconds[0], diagSummary, correctedLdu[0]);
     }
 
     /**
@@ -596,7 +598,8 @@ public class DecodeQualityTest
         boolean[] adaptiveDisabled = {false};
 
         Listener<IMessage> listener = msg -> {
-            if(msg instanceof LDUMessage ldu && ((P25P1Message)msg).isValid())
+            //Skip DUID-corrected LDUs, which the live P25P1AudioModule replaces with silence
+            if(msg instanceof LDUMessage ldu && ((P25P1Message)msg).isValid() && !ldu.isDuidCorrected())
             {
                 lduTimestamps.add(((P25P1Message)msg).getTimestamp());
                 for(byte[] frame : ldu.getIMBEFrames())

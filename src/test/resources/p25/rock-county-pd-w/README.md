@@ -29,7 +29,7 @@ The same on the old build (`upstream-merge-2026-10`, f2998fa7) and the merge can
 
 | Metric | Value |
 |---|---|
-| Valid LDUs | 84 (test floor 80) |
+| Valid LDUs | 74 voice LDUs (test floor 67), plus 2 DUID-corrected TDUs. Before 2026-11-22 this read 84, counting 11 corrected TDUs as voice |
 | Valid HDUs | 1 |
 | LDU2 with valid, clear encryption sync | 36 (test floor 35) |
 | LDU2 with valid encryption sync saying "encrypted" | 0 |
@@ -55,8 +55,29 @@ Listening scores on the full 44 s recording (2026-11-11):
 "Usable" counts IMBE frames JMBE played without muting or repeating, scored by chaining
 `IMBEFrame.getModelParameters()` the way the codec does. The candidate's CQPSK decodes about 160 more frames
 than the old build's, mostly 28 to 31 s into the recording, where the old build decoded nothing. The
-listener heard no extra speech there, and that stretch is the likely source of the clicking. It hasn't been
-isolated.
+listener heard no extra speech there, and that stretch is the likely source of the clicking.
+
+**Isolated 2026-11-22: unlimited DUID correction on CQPSK.** The repeater sends 2 to 2.6 s bursts of back-to-back
+TDUs at the end of transmissions and during signalling. After any voice frame, the framer rewrites an arriving TDU
+as the next LDU (DUID correction). C4FM limits that to 3 in a row and CQPSK_V2 to 15, but `P25P1DecoderLSM` had no
+limit, and with preemptive sync off each rewritten 864-dibit LDU swallows the next 11 TDUs. A TDU burst became 2.5 s
+of rewritten noise LDUs. The live audio module silences those LDUs, but its first silenced frame replayed the last
+20 ms of voice at half volume, a blip after the speaker stopped, and the call ended late.
+
+`P25P1DecoderLSM` now limits DUID correction to 1 in a row (`-Dp25.duid.limit.cqpsk`, 0 for the old unlimited
+behaviour), and the audio module emits silence for corrected LDUs without the replay. On this collection, with the
+corrected TDUs not counted as voice (bench harness, 25 recordings):
+
+| DUID correction | Voice LDUs | Audio s | Valid messages |
+|---|---|---|---|
+| Unlimited (before) | 1790 | 322.2 | 3438 |
+| Off | 1787 | 321.7 | 10972 |
+| **Limit 1 (now)** | **1796** | **323.3** | **10110** |
+| Limit 3 | 1785 | 321.3 | 8492 |
+
+The tests now count voice LDUs only, so the floors below and in `P25P1LSMFrequencyAmbiguityTest` were reset to ~90%
+of the 2026-11-22 voice counts. The "Valid LDUs" column of the collection table below predates this and includes
+corrected TDUs. Not yet confirmed by listening.
 
 On this excerpt, CQPSK_V2 decodes 90 to 91 valid LDUs, 8 to 9 of them garbage, on both builds.
 
@@ -114,7 +135,9 @@ decoded by CQPSK (`P25P1DecoderLSM`) on master `635888d1` with no frequency shif
 | `off-frequency/off-frequency_20261121_062841_3.0-7.3s_154815000_baseband.wav` | 4.3 | 1 | 2.8 | 2.8 | 1 | 0 | 17 | 22 |
 | `off-frequency/off-frequency_20261121_095214_3.0-12.3s_154815000_baseband.wav` | 9.3 | 1 | 7.8 | 7.8 | 0 | 0 | 28 | **0** |
 
-`P25ReferenceRecordingTest.rockCountyPDWCollectionCQPSK` checks a floor of about 90% of these LDU counts. It allows
+`P25ReferenceRecordingTest.rockCountyPDWCollectionCQPSK` checks a floor of about 90% of each recording's voice LDU
+count on 2026-11-22 (the counts in this table include DUID-corrected TDUs). Four of the five short recordings
+(all but `short_20261113_172118`) are TDU signalling bursts with 1 or 2 voice LDUs. It allows
 "encrypted" LDU2s and foreign-NAC messages (bit-error artifacts) up to 5% of the valid LDUs, minimum 2. The count
 varies slightly by platform: `rapid_20261119_120004` decodes 2 on Windows and 3 on the Linux CI runner. It covers every recording except the two signalling bursts
 and the off-frequency ones. `P25P1LSMFrequencyAmbiguityTest` uses the off-frequency recordings.
