@@ -1,6 +1,6 @@
 # Decode regression corpus
 
-21 baseband I/Q captures (82.6 MB, 50 kHz stereo PCM) used to prove that a code change did not
+23 baseband I/Q captures (91.9 MB, 50 kHz stereo PCM) used to prove that a code change did not
 degrade decode quality. `./gradlew runRegression` decodes the whole corpus and compares against the
 committed baseline, exiting non-zero if anything got worse.
 
@@ -33,8 +33,14 @@ gated metrics carry **zero tolerance**:
 | `audio_seconds` | must not decrease by more than 1% |
 | MDC CRC-valid bursts (per file) | must not decrease |
 
-The baseline was last reset on 2026-11-22 from the build running live then, when `ldu_count` stopped counting
-corrected TDUs (180 of the previous 869). The audio metrics skip corrected LDUs for the same reason.
+The baseline was last reset on 2026-11-25, when the audio module started suppressing LDUs that carry no recoverable
+voice (`P25P1AudioModule.isUnrecoverable`): LDUs whose corrected IMBE frames total 72+ errors with fewer than 3 clean
+frames, and LDUs that the framer truncated (dispatched with zero padding because the next frame's sync arrived early).
+`ldu_count` and `valid_messages` did not change. `audio_seconds` fell on 11 files (most on the simulcast clips), because
+JMBE 1.0.9, which the gate runs with, synthesizes every frame, so the suppressed frames had been counted as audio.
+Spectrograms of the largest drops (`p25-c4fm-a_03`, `p25-lsm-a_03`) showed that what was removed were broadband clicks,
+tonal blobs and a click train, with the speech intact. The audio metrics skip DUID-corrected and unrecoverable LDUs,
+as the live audio module does. The previous reset, on 2026-11-22, was when `ldu_count` stopped counting corrected TDUs.
 
 Everything else — `corrected_ldu`, `sync_blocked`, `bit_errors`, `sync_losses`, `total_messages`, `audio_segments`,
 `quality_score` — is printed with its delta but never fails the run. Read those: they are how you
@@ -79,10 +85,11 @@ defaults — but keeping them makes the intended live configuration explicit.
 | `p25-c4fm-d` | P25P1 C4FM | 827 | 2 | Short/high-silence and long/continuous ends of the same channel. |
 | `p25-c4fm-e` | P25P1 C4FM | **0 (auto)** | 2 | NAC auto-detect, which exercises `NACTracker`. One dense short burst, one long sparse capture. |
 | `p25-c4fm-f` | P25P1 C4FM | 2311 | 1 | Mid-length with a 12% artifact rate. |
+| `p25-c4fm-g` | P25P1 C4FM | 2144 | 2 | **Unrecoverable voice.** `_01` is a unit received at ~4 dB in-band SNR: sync, NAC and link control decode, but every voice frame is near-random bits, and the call must produce **no audio** (it used to come out as clicks half a second apart). `_02` is clean calls at ~12 dB with a truncated phantom LDU2 at call start and a 138-bit LDU stub at call end, which must be dropped while the speech is kept. The gate can't see junk audio return on a zero baseline, so `UnrecoverableVoiceCorpusTest` checks the LDU classification of both clips. |
 | `nbfm-mdc-a` | NBFM 12.5 | — | 2 | MDC-1200 bursts for the dual-branch diversity decoder. |
 | `nbfm-mdc-b` | NBFM 12.5 | — | 2 | More MDC-1200, including the richest file in the set (4 CRC-valid bursts). |
 
-The MDC evaluator runs over the **whole** corpus, not just the NBFM channels. The 17 P25 files all
+The MDC evaluator runs over the **whole** corpus, not just the NBFM channels. The 19 P25 files all
 baseline at zero CRC-valid bursts, so they double as a false-positive guard on the MDC detector.
 
 ## Provenance
@@ -92,6 +99,11 @@ Clips were selected from a 614 MB pool of activity-triggered captures by profili
 and signal quality. Long captures were trimmed to 25 s; every trimmed clip was re-profiled to confirm
 it kept its signal. One (`p25-c4fm-e_02`) had its traffic past the 25 s mark and uses a 25–50 s
 window instead. MDC clips were verified to retain all CRC-valid bursts after trimming.
+
+The `p25-c4fm-g` clips were added on 2026-11-25 from a later set of activity-triggered captures, chosen by replaying
+each capture through the live processing chain (`runPipelineReplay -Pplaylist=... -Pchannel=... -PaudioOut=...`, which
+also writes per-frame IMBE error counts) and measuring each call's in-band SNR. `_01` is the first 25 s of a 39 s
+capture and keeps the whole call; `_02` is untrimmed.
 
 `corpus.json` records the per-file duration, size, decoder config, and the character each clip was
 chosen for.

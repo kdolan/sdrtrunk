@@ -68,6 +68,7 @@ public class PipelineReplayTest
         String modulation = "C4FM";
         int maxFiles = -1;
         boolean continuous = false;
+        String playlistPath = null, channelName = null;
 
         for(int i = 0; i < args.length; i++)
         {
@@ -80,34 +81,42 @@ public class PipelineReplayTest
                 case "--jmbe" -> jmbePath = args[++i];
                 case "--max-files" -> maxFiles = Integer.parseInt(args[++i]);
                 case "--continuous" -> continuous = true;
+                case "--playlist" -> playlistPath = args[++i];
+                case "--channel" -> channelName = args[++i];
+                case "--audio-out" -> sAudioOut = new File(args[++i]);
             }
+        }
+
+        if(playlistPath != null && channelName != null)
+        {
+            sPlaylistChannel = loadChannel(playlistPath, channelName);
+            if(sPlaylistChannel.getSourceConfiguration() instanceof SourceConfigTuner sct && frequency == 0)
+            {
+                frequency = sct.getFrequency();
+            }
+            System.out.println("Using playlist channel config: " + channelName);
+        }
+
+        if(sAudioOut != null)
+        {
+            sAudioOut.mkdirs();
         }
 
         if(samplesDir == null || frequency == 0)
         {
             System.out.println("Usage: PipelineReplayTest --samples <dir> --freq <hz> --nac <decimal> [--mod C4FM] [--jmbe <jar>] [--max-files N]");
+            System.out.println("       [--playlist <xml> --channel <name>] (live channel decode config) [--audio-out <dir>] (segment WAVs)");
             System.exit(1);
             return;
         }
 
-        // Set JMBE path in Java Preferences so UserPreferences can find it
-        if(jmbePath != null)
-        {
-            try
-            {
-                java.util.prefs.Preferences prefs = io.github.dsheirer.settings.Setting.JMBE_LIBRARY_PATH.getNode();
-                prefs.put("path.jmbe.library.1.0.0", jmbePath);
-                prefs.flush();
-            }
-            catch(Exception e)
-            {
-                System.err.println("WARNING: Failed to set JMBE path in preferences: " + e.getMessage());
-            }
-        }
+        // Use the JMBE jar for this run only.  Writing the Java preference would change the live application's
+        // codec at its next start, so the path is injected into each run's Settings instead.
+        sJmbePath = jmbePath;
 
         // Find baseband files
         File dir = new File(samplesDir);
-        File[] files = dir.listFiles((d, name) -> name.endsWith("_baseband.wav"));
+        File[] files = dir.isFile() ? new File[]{dir} : dir.listFiles((d, name) -> name.endsWith("_baseband.wav"));
         if(files == null || files.length == 0)
         {
             System.err.println("No baseband files found in: " + samplesDir);
@@ -164,11 +173,18 @@ public class PipelineReplayTest
         channel.setSystem("Test");
         channel.setSite("Replay");
 
-        DecodeConfigP25Phase1 decodeConfig = new DecodeConfigP25Phase1();
-        decodeConfig.setModulation(Modulation.valueOf(modulation));
-        decodeConfig.setConfiguredNAC(nac);
-        decodeConfig.setAudioHoldoverMs(180);
-        channel.setDecodeConfiguration(decodeConfig);
+        if(sPlaylistChannel != null)
+        {
+            channel.setDecodeConfiguration(sPlaylistChannel.getDecodeConfiguration());
+        }
+        else
+        {
+            DecodeConfigP25Phase1 decodeConfig = new DecodeConfigP25Phase1();
+            decodeConfig.setModulation(Modulation.valueOf(modulation));
+            decodeConfig.setConfiguredNAC(nac);
+            decodeConfig.setAudioHoldoverMs(180);
+            channel.setDecodeConfiguration(decodeConfig);
+        }
 
         SourceConfigTuner sourceConfig = new SourceConfigTuner();
         sourceConfig.setFrequency(frequency);
@@ -191,7 +207,7 @@ public class PipelineReplayTest
         ProcessingChain processingChain = new ProcessingChain(channel, aliasModel);
 
         // Create decoder modules via DecoderFactory (same as live system)
-        Settings settings = new Settings();
+        Settings settings = createSettings();
         ChannelMapModel channelMapModel = new ChannelMapModel();
         List<Module> modules = DecoderFactory.getModules(channelMapModel, channel, aliasModel, settings, null, null);
         processingChain.addModules(modules);
@@ -221,8 +237,21 @@ public class PipelineReplayTest
 
         // Add instrumentation listeners
         // 1. Message listener — count messages by DUID
+        long[] samplesFed = {0};
+        StringBuilder frameLog = new StringBuilder("t,duid,corrected,frame,total,errors,received,unrecoverable\n");
         processingChain.addMessageListener(msg -> {
             messageCount.incrementAndGet();
+            if(sAudioOut != null && msg instanceof io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDUMessage ldu)
+            {
+                List<jmbe.frame.CorrectedIMBEFrame> cf = ldu.getCorrectedIMBEFrames();
+                boolean unrecoverable = P25P1AudioModule.isUnrecoverable(ldu);                for(int k = 0; k < cf.size(); k++)
+                {
+                    frameLog.append(String.format("%.3f,%s,%b,%d,%d,%s,%b,%b%n", samplesFed[0] / 50000.0,
+                        ldu.getDUID().name(), ldu.isDuidCorrected(), k, cf.get(k).getErrorCountTotal(),
+                        java.util.Arrays.toString(cf.get(k).getErrors()).replace(",", " "),
+                        ldu.isIMBEFrameReceived(k), unrecoverable));
+                }
+            }
             if(msg instanceof P25P1Message p)
             {
                 String duid = p.getDUID().name();
@@ -247,12 +276,14 @@ public class PipelineReplayTest
 
         // 4. Audio segment listener — count and measure audio output
         processingChain.addAudioSegmentListener(segment -> {
-            audioSegmentCount.incrementAndGet();
+            int index = audioSegmentCount.incrementAndGet();
+            double startSeconds = samplesFed[0] / 50000.0;
             // Track when segment completes
             segment.completeProperty().addListener((obs, oldVal, newVal) -> {
                 if(newVal)
                 {
                     audioSeconds[0] += segment.getDuration() / 1000.0;
+                    writeSegment(file, index, startSeconds, segment);
                 }
             });
         });
@@ -268,10 +299,19 @@ public class PipelineReplayTest
         processingChain.start();
 
         // Feed samples through the pipeline
-        while(source.next(2048)) {}
+        while(source.next(2048))
+        {
+            samplesFed[0] += 2048;
+        }
 
         // Allow any pending events to settle
         Thread.sleep(100);
+
+        if(sAudioOut != null)
+        {
+            java.nio.file.Files.writeString(new File(sAudioOut,
+                file.getName().replace("_baseband.wav", "_frames.csv")).toPath(), frameLog.toString());
+        }
 
         // Stop and collect results
         processingChain.stop();
@@ -325,6 +365,98 @@ public class PipelineReplayTest
             (int)callStarts, (int)callContinuations, (int)fadeEvents, (int)unsquelch, (int)squelch);
     }
 
+    private static Channel sPlaylistChannel = null;
+    private static String sJmbePath = null;
+
+    /**
+     * Creates settings whose JMBE library path is the --jmbe argument, set on the cached field so that nothing is
+     * persisted to the user's preferences.
+     */
+    static Settings createSettings() throws Exception
+    {
+        Settings settings = new Settings();
+        if(sJmbePath != null)
+        {
+            var jmbe = settings.getJmbeLibrarySettings();
+            var field = jmbe.getClass().getDeclaredField("mPathJmbeLibrary");
+            field.setAccessible(true);
+            field.set(jmbe, java.nio.file.Path.of(sJmbePath));
+        }
+        return settings;
+    }
+    private static File sAudioOut = null;
+
+    /**
+     * Loads the named channel from a playlist so the replay runs with the exact live decode configuration.
+     */
+    static Channel loadChannel(String playlistPath, String channelName) throws Exception
+    {
+        com.fasterxml.jackson.dataformat.xml.JacksonXmlModule xmlModule =
+            new com.fasterxml.jackson.dataformat.xml.JacksonXmlModule();
+        xmlModule.setDefaultUseWrapper(false);
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.dataformat.xml.XmlMapper(xmlModule)
+            .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        try(java.io.InputStream in = java.nio.file.Files.newInputStream(java.nio.file.Path.of(playlistPath)))
+        {
+            io.github.dsheirer.playlist.PlaylistV2 playlist =
+                mapper.readValue(in, io.github.dsheirer.playlist.PlaylistV2.class);
+            for(Channel c : playlist.getChannels())
+            {
+                if(channelName.equals(c.getName()))
+                {
+                    return c;
+                }
+            }
+        }
+        throw new IllegalArgumentException("Channel not found in playlist: " + channelName);
+    }
+
+    /**
+     * Writes a completed audio segment as 8 kHz 16-bit mono WAV, named with its approximate start offset in the
+     * baseband file so that a segment can be matched back to the I/Q.
+     */
+    static void writeSegment(File baseband, int index, double startSeconds, AudioSegment segment)
+    {
+        if(sAudioOut == null)
+        {
+            return;
+        }
+
+        try
+        {
+            List<float[]> buffers = segment.getAudioBuffers();
+            int total = 0;
+            for(float[] b : buffers)
+            {
+                total += b.length;
+            }
+            byte[] pcm = new byte[total * 2];
+            int p = 0;
+            for(float[] b : buffers)
+            {
+                for(float f : b)
+                {
+                    int v = Math.round(Math.max(-1f, Math.min(1f, f)) * 32767f);
+                    pcm[p++] = (byte)(v & 0xFF);
+                    pcm[p++] = (byte)((v >> 8) & 0xFF);
+                }
+            }
+            String base = baseband.getName().replace("_baseband.wav", "");
+            File out = new File(sAudioOut, String.format("%s_seg%02d_t%06.2f.wav", base, index, startSeconds));
+            javax.sound.sampled.AudioFormat format = new javax.sound.sampled.AudioFormat(8000f, 16, 1, true, false);
+            try(javax.sound.sampled.AudioInputStream ais = new javax.sound.sampled.AudioInputStream(
+                new java.io.ByteArrayInputStream(pcm), format, total))
+            {
+                javax.sound.sampled.AudioSystem.write(ais, javax.sound.sampled.AudioFileFormat.Type.WAVE, out);
+            }
+            System.out.printf("  wrote %s (%.2fs)%n", out.getName(), total / 8000.0);
+        }
+        catch(Exception e)
+        {
+            System.err.println("Failed to write segment audio: " + e.getMessage());
+        }
+    }
+
     record ReplayResult(int messageCount, int audioSegmentCount, double audioSeconds,
                         int callStarts, int callContinuations, int fadeEvents,
                         int unsquelchCount, int squelchCount) {}
@@ -366,11 +498,18 @@ public class PipelineReplayTest
         channel.setSystem("Test");
         channel.setSite("Replay");
 
-        DecodeConfigP25Phase1 decodeConfig = new DecodeConfigP25Phase1();
-        decodeConfig.setModulation(Modulation.valueOf(modulation));
-        decodeConfig.setConfiguredNAC(nac);
-        decodeConfig.setAudioHoldoverMs(180);
-        channel.setDecodeConfiguration(decodeConfig);
+        if(sPlaylistChannel != null)
+        {
+            channel.setDecodeConfiguration(sPlaylistChannel.getDecodeConfiguration());
+        }
+        else
+        {
+            DecodeConfigP25Phase1 decodeConfig = new DecodeConfigP25Phase1();
+            decodeConfig.setModulation(Modulation.valueOf(modulation));
+            decodeConfig.setConfiguredNAC(nac);
+            decodeConfig.setAudioHoldoverMs(180);
+            channel.setDecodeConfiguration(decodeConfig);
+        }
 
         SourceConfigTuner sourceConfig = new SourceConfigTuner();
         sourceConfig.setFrequency(frequency);
@@ -385,7 +524,7 @@ public class PipelineReplayTest
         AliasModel aliasModel = new AliasModel();
         ProcessingChain processingChain = new ProcessingChain(channel, aliasModel);
 
-        Settings settings = new Settings();
+        Settings settings = createSettings();
         ChannelMapModel channelMapModel = new ChannelMapModel();
         List<Module> modules = DecoderFactory.getModules(channelMapModel, channel, aliasModel, settings, null, null);
         processingChain.addModules(modules);
@@ -412,10 +551,17 @@ public class PipelineReplayTest
         }
 
         // Audio segment listener
+        File[] currentFile = {files[0]};
         processingChain.addAudioSegmentListener(segment -> {
-            totalAudioSegments.incrementAndGet();
+            int index = totalAudioSegments.incrementAndGet();
+            File segmentFile = currentFile[0];
             segment.completeProperty().addListener((obs, oldVal, newVal) -> {
-                if(newVal) totalAudioSeconds[0] += segment.getDuration() / 1000.0;
+                if(newVal)
+                {
+                    totalAudioSeconds[0] += segment.getDuration() / 1000.0;
+                    writeSegment(new File(segmentFile.getName().replace("_baseband.wav", "_continuous_baseband.wav")),
+                        index, 0, segment);
+                }
             });
         });
 
@@ -431,6 +577,7 @@ public class PipelineReplayTest
         for(int f = 0; f < files.length; f++)
         {
             int segmentsBefore = totalAudioSegments.get();
+            currentFile[0] = files[f];
 
             Listener<ComplexSamples> chainBroadcaster = firstSource.getListener();
 

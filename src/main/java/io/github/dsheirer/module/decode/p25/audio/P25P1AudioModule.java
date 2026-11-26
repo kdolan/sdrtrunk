@@ -75,6 +75,21 @@ public class P25P1AudioModule extends ImbeAudioModule
     private int mAdaptivePassCount = 0;
     private boolean mAdaptiveGateDisabled = false;
 
+    // Unrecoverable LDU gate.  Below roughly 6 dB in-band SNR the voice frames arrive as near-random bits while the
+    // sync, NAC and link control still decode, so the call is accepted.  JMBE mutes most of those frames and lets the
+    // odd one through, which comes out as isolated clicks in an otherwise silent call.  The corrected-frame error
+    // totals are bimodal: clean LDUs sum to 0-45 across their 9 frames, these LDUs to 80-135.  An LDU at or above the
+    // threshold with fewer than MIN_CLEAN_FRAMES clean frames carries no recoverable voice: it is not decoded, and the
+    // call does not start its audio on one, so a call that is unrecoverable from start to finish produces no audio
+    // segment (its call event is still logged).  An LDU that the framer truncated is judged on its received frames.
+    // System property p25.unrecoverable.ldu.errors: 0 disables the gate (truncated LDU padding is still dropped).
+    public static final int UNRECOVERABLE_LDU_ERROR_TOTAL =
+            Integer.parseInt(System.getProperty("p25.unrecoverable.ldu.errors", "72"));
+    private static final int CLEAN_FRAME_MAX_ERRORS = 3;
+    private static final int MIN_CLEAN_FRAMES = 3;
+    private boolean mCallAudioStarted = false;
+    private boolean mCodecResetPending = false;
+
     private SquelchStateListener mSquelchStateListener = new SquelchStateListener();
     // ponytail: fixed +6 dB; upstream #2489 dropped the old 5x hard-clipped gain entirely. Level processing beyond
     // this belongs on the client so downstream tone detection sees untouched audio.
@@ -314,14 +329,34 @@ public class P25P1AudioModule extends ImbeAudioModule
             // transmission that repeats the final 20 ms of voice after the speaker stopped, an audible blip.
             if(ldu.isDuidCorrected())
             {
-                for(int x = 0; x < ldu.getIMBEFrames().size(); x++)
+                addSilence(ldu.getIMBEFrames().size());
+                return;
+            }
+
+            // Unrecoverable voice: silence once the call's audio has started, nothing before that.  The codec is
+            // reset before the next good frame so that it doesn't synthesize from parameters of the bad run.  Only
+            // the received frames get silence: the zero padding of a truncated LDU took up no air time, because the
+            // next frame's sync arrived in its place.
+            if(isUnrecoverable(ldu))
+            {
+                mCodecResetPending = true;
+                addSilence(getReceivedFrameCount(ldu));
+
+                if(P25PipelineDiagnostics.isEnabled())
                 {
-                    mTotalFrameCount++;
-                    mConsecutiveGatedFrames++;
-                    addAudio(new float[FRAME_SAMPLE_COUNT]);
+                    P25PipelineDiagnostics.log("AUDIO", "AUDIO_MOD", "LDU_UNRECOVERABLE",
+                        ldu.getDUID().name() + " errors=" + getErrorTotal(ldu) + " callAudioStarted=" + mCallAudioStarted);
                 }
                 return;
             }
+
+            if(mCodecResetPending)
+            {
+                getAudioCodec().reset();
+                mCodecResetPending = false;
+            }
+
+            mCallAudioStarted = true;
 
             List<byte[]> frames = ldu.getIMBEFrames();
 
@@ -330,6 +365,12 @@ public class P25P1AudioModule extends ImbeAudioModule
 
             for(int x = 0; x < frames.size(); x++)
             {
+                // Zero padding after the received bits of a truncated LDU is not voice, and took up no air time
+                if(!ldu.isIMBEFrameReceived(x))
+                {
+                    continue;
+                }
+
                 byte[] frame = frames.get(x);
                 mTotalFrameCount++;
 
@@ -390,6 +431,107 @@ public class P25P1AudioModule extends ImbeAudioModule
     }
 
     /**
+     * Adds silence frames to keep the call's audio timing continuous, but only once the call has produced decoded
+     * audio.  Before that there is nothing to keep in time with, and adding silence would open an audio segment that
+     * holds nothing but silence.
+     */
+    private void addSilence(int frameCount)
+    {
+        for(int x = 0; x < frameCount; x++)
+        {
+            mTotalFrameCount++;
+            mConsecutiveGatedFrames++;
+
+            if(mCallAudioStarted)
+            {
+                addAudio(new float[FRAME_SAMPLE_COUNT]);
+            }
+        }
+    }
+
+    /**
+     * Number of the LDU's IMBE voice frames that were fully received: 9, unless the LDU was truncated.
+     */
+    public static int getReceivedFrameCount(LDUMessage ldu)
+    {
+        int frameCount = ldu.getIMBEFrames().size();
+        int received = 0;
+
+        for(int x = 0; x < frameCount; x++)
+        {
+            if(ldu.isIMBEFrameReceived(x))
+            {
+                received++;
+            }
+        }
+
+        return received;
+    }
+
+    /**
+     * Sum of the corrected-frame error counts across the LDU's received IMBE voice frames, scaled up to a full LDU of
+     * 9 frames when the LDU was truncated, so that it compares with UNRECOVERABLE_LDU_ERROR_TOTAL.  An LDU with no
+     * received frames returns Integer.MAX_VALUE.
+     */
+    public static int getErrorTotal(LDUMessage ldu)
+    {
+        List<CorrectedIMBEFrame> frames = ldu.getCorrectedIMBEFrames();
+        int total = 0;
+        int received = 0;
+
+        for(int x = 0; x < frames.size(); x++)
+        {
+            if(ldu.isIMBEFrameReceived(x))
+            {
+                total += frames.get(x).getErrorCountTotal();
+                received++;
+            }
+        }
+
+        if(received == 0)
+        {
+            return Integer.MAX_VALUE;
+        }
+
+        return total * frames.size() / received;
+    }
+
+    /**
+     * Indicates if the LDU carries no recoverable voice: its received voice frames are too corrupted, or it was
+     * truncated before any complete voice frame was received.  See UNRECOVERABLE_LDU_ERROR_TOTAL.
+     */
+    public static boolean isUnrecoverable(LDUMessage ldu)
+    {
+        int errorTotal = getErrorTotal(ldu);
+
+        //Nothing received: padding is never voice, even with the gate disabled
+        if(errorTotal == Integer.MAX_VALUE)
+        {
+            return true;
+        }
+
+        if(UNRECOVERABLE_LDU_ERROR_TOTAL <= 0 || errorTotal < UNRECOVERABLE_LDU_ERROR_TOTAL)
+        {
+            return false;
+        }
+
+        //A fading signal can leave a few clean frames among the corrupted ones.  Those carry voice the codec can use,
+        //so the LDU is only unrecoverable when it has fewer than MIN_CLEAN_FRAMES of them.
+        List<CorrectedIMBEFrame> frames = ldu.getCorrectedIMBEFrames();
+        int clean = 0;
+
+        for(int x = 0; x < frames.size(); x++)
+        {
+            if(ldu.isIMBEFrameReceived(x) && frames.get(x).getErrorCountTotal() <= CLEAN_FRAME_MAX_ERRORS)
+            {
+                clean++;
+            }
+        }
+
+        return clean < MIN_CLEAN_FRAMES;
+    }
+
+    /**
      * Updates the adaptive gate state based on whether the current frame exceeds the threshold.
      * When most frames fail the gate (non-bimodal error distribution), the gate auto-disables
      * to let the codec attempt partial decode instead of producing silence/repetition.
@@ -441,6 +583,8 @@ public class P25P1AudioModule extends ImbeAudioModule
         mAdaptiveWindowIndex = 0;
         mAdaptivePassCount = 0;
         mAdaptiveGateDisabled = false;
+        mCallAudioStarted = false;
+        mCodecResetPending = false;
     }
 
     /**

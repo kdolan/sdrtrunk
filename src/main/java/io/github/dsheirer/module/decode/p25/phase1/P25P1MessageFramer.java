@@ -29,6 +29,7 @@ import io.github.dsheirer.message.IMessage;
 import io.github.dsheirer.message.SyncLossMessage;
 import io.github.dsheirer.module.decode.p25.phase1.message.P25MessageFactory;
 import io.github.dsheirer.module.decode.p25.phase1.message.P25P1Message;
+import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDUMessage;
 import io.github.dsheirer.module.decode.p25.phase1.message.pdu.PDUHeader;
 import io.github.dsheirer.module.decode.p25.phase1.message.pdu.PDUMessageFactory;
 import io.github.dsheirer.module.decode.p25.phase1.message.pdu.PDUSequence;
@@ -581,11 +582,18 @@ public class P25P1MessageFramer extends C4FMMessageFramer
         adjustDibitCounterFromMessageAssembler();
 
         CorrectedBinaryMessage cbm = mMessageAssembler.getMessage();
+        int receivedBitCount = cbm.currentSize();
         P25P1Message message = P25MessageFactory.create(mMessageAssembler.getDataUnitID(), mMessageAssembler.getNAC(),
                 getTimestamp(), cbm);
 
         if(message != null)
         {
+            //An LDU that was forced to complete carries zero padding after the bits that were received
+            if(message instanceof LDUMessage ldu && receivedBitCount < cbm.size())
+            {
+                ldu.setReceivedBitCount(receivedBitCount);
+            }
+
             // Mark messages whose DUID was corrected by context-aware prediction.
             // These are noise-derived LDUs after a missed TDU — audio should be suppressed.
             if(mConsecutiveDuidCorrections > 0)

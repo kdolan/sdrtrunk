@@ -985,6 +985,15 @@ tasks.register('runPipelineReplay', JavaExec) {
     if(project.hasProperty('continuous')) {
         argsList.add('--continuous')
     }
+    if(project.hasProperty('playlist')) {
+        argsList.addAll(['--playlist', project.property('playlist')])
+    }
+    if(project.hasProperty('channel')) {
+        argsList.addAll(['--channel', project.property('channel')])
+    }
+    if(project.hasProperty('audioOut')) {
+        argsList.addAll(['--audio-out', project.property('audioOut')])
+    }
     if(project.hasProperty('diag')) {
         jvmArgs += '-Dp25.diag=true'
     }

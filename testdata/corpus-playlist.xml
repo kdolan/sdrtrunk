@@ -41,6 +41,12 @@
     <decode_configuration type="decodeConfigP25Phase1" dfeMu="0.005" configuredNAC="2311" audioHoldoverMs="180" ignoreEncryptionState="false" pipelineDiagnostics="true" modulation="C4FM" afcAlpha="0.01" adaptiveThresholds="false" maxBchErrors="11" maxImbeErrors="0" cmaTrackingMu="0.001" cmaGearShiftMs="200" dfeEnabled="false" cmaAcquisitionMu="0.003" gardnerBandwidth="0.01" ignore_data_calls="false" traffic_channel_pool_size="10" />
     <record_configuration />
   </channel>
+  <channel name="p25-c4fm-g" enabled="true" order="1" system="Corpus" site="Regression">
+    <source_configuration type="sourceConfigTuner" frequency="100000010" source_type="TUNER" />
+    <aux_decode_configuration />
+    <decode_configuration type="decodeConfigP25Phase1" dfeMu="0.005" configuredNAC="2144" audioHoldoverMs="180" ignoreEncryptionState="true" pipelineDiagnostics="false" modulation="C4FM" afcAlpha="0.01" adaptiveThresholds="false" maxBchErrors="5" maxImbeErrors="0" cmaTrackingMu="0.001" cmaGearShiftMs="200" dfeEnabled="false" cmaAcquisitionMu="0.003" gardnerBandwidth="0.01" ignore_data_calls="false" traffic_channel_pool_size="20" />
+    <record_configuration />
+  </channel>
   <channel name="nbfm-mdc-a" enabled="true" order="1" system="Corpus" site="Regression">
     <source_configuration type="sourceConfigTuner" frequency="100000008" source_type="TUNER" />
     <aux_decode_configuration />

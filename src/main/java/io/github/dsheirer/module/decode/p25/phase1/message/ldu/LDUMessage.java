@@ -41,8 +41,41 @@ public abstract class LDUMessage extends P25P1Message
     public static final int IMBE_FRAME_9 = 1424;
     public static final int[] LOW_SPEED_DATA = {1392, 1393, 1394, 1395, 1396, 1397, 1398, 1399, 1408, 1409, 1410, 1411,
             1412, 1413, 1414, 1415};
+    private static final int[] IMBE_FRAME_OFFSETS = {IMBE_FRAME_1, IMBE_FRAME_2, IMBE_FRAME_3, IMBE_FRAME_4, IMBE_FRAME_5,
+            IMBE_FRAME_6, IMBE_FRAME_7, IMBE_FRAME_8, IMBE_FRAME_9};
+    private static final int IMBE_FRAME_LENGTH = 144;
     private List<byte[]> mIMBIFrames;
     private List<CorrectedIMBEFrame> mCorrectedIMBEFrames;
+    private int mReceivedBitCount = -1;
+
+    /**
+     * Sets the number of message bits that were received before the framer forced this LDU to complete because the
+     * next frame's sync arrived early.  The remaining bits are zero padding, not received data.
+     * @param receivedBitCount number of leading message bits that were received.
+     */
+    public void setReceivedBitCount(int receivedBitCount)
+    {
+        mReceivedBitCount = receivedBitCount;
+    }
+
+    /**
+     * Indicates if this LDU was truncated: dispatched with fewer bits than its full length.
+     */
+    public boolean isTruncated()
+    {
+        return mReceivedBitCount >= 0;
+    }
+
+    /**
+     * Indicates if every bit of the IMBE voice frame at the index was received.  A frame that extends into the zero
+     * padding of a truncated LDU is not voice: an all-zero frame passes the codec's first-codeword check, so it is
+     * synthesized, and comes out as a click.
+     * @param index of the IMBE frame, 0-8.
+     */
+    public boolean isIMBEFrameReceived(int index)
+    {
+        return mReceivedBitCount < 0 || IMBE_FRAME_OFFSETS[index] + IMBE_FRAME_LENGTH <= mReceivedBitCount;
+    }
 
     /**
      * Constructs an instance

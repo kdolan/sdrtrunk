@@ -45,6 +45,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import io.github.dsheirer.module.decode.p25.audio.P25P1AudioModule;
 import java.util.Map;
 import javax.xml.parsers.DocumentBuilderFactory;
 import org.w3c.dom.Document;
@@ -598,12 +599,21 @@ public class DecodeQualityTest
         boolean[] adaptiveDisabled = {false};
 
         Listener<IMessage> listener = msg -> {
-            //Skip DUID-corrected LDUs, which the live P25P1AudioModule replaces with silence
-            if(msg instanceof LDUMessage ldu && ((P25P1Message)msg).isValid() && !ldu.isDuidCorrected())
+            //Skip DUID-corrected and unrecoverable LDUs, which the live P25P1AudioModule replaces with silence
+            if(msg instanceof LDUMessage ldu && ((P25P1Message)msg).isValid() && !ldu.isDuidCorrected() &&
+               !P25P1AudioModule.isUnrecoverable(ldu))
             {
                 lduTimestamps.add(((P25P1Message)msg).getTimestamp());
-                for(byte[] frame : ldu.getIMBEFrames())
+                List<byte[]> imbeFrames = ldu.getIMBEFrames();
+                for(int frameIndex = 0; frameIndex < imbeFrames.size(); frameIndex++)
                 {
+                    //The live audio module drops the zero padding of a truncated LDU
+                    if(!ldu.isIMBEFrameReceived(frameIndex))
+                    {
+                        continue;
+                    }
+
+                    byte[] frame = imbeFrames.get(frameIndex);
                     // Pre-codec quality gate with adaptive disable
                     if(maxImbeErrors >= 0)
                     {
