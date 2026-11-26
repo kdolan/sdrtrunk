@@ -76,8 +76,8 @@ public class P25P1DecoderC4FM extends FeedbackDecoder implements IByteBufferProv
     //stopband starts of 3300 - 4000 Hz perform similarly, a 5-symbol span is too short, and 12 symbols adds nothing.
     private static final double RECEIVE_FILTER_STOP_BAND_START = 3600.0; //Hertz
     private static final int RECEIVE_FILTER_SYMBOL_SPAN = 8;
-    private static final double BASEBAND_FILTER_PASS_BAND = 5200.0; //Hertz
-    private static final double BASEBAND_FILTER_STOP_BAND = 6500.0; //Hertz
+    public static final double BASEBAND_FILTER_PASS_BAND = 5200.0; //Hertz
+    public static final double BASEBAND_FILTER_STOP_BAND = 6500.0; //Hertz
 
     private static final float ENERGY_EMA_FACTOR = 0.001f;
     private static final float ENERGY_SILENCE_RATIO = 0.10f;
@@ -106,8 +106,24 @@ public class P25P1DecoderC4FM extends FeedbackDecoder implements IByteBufferProv
         return DecoderType.P25_PHASE1;
     }
 
+    private final double mBasebandFilterPassBand;
+    private final double mBasebandFilterStopBand;
+
     public P25P1DecoderC4FM()
     {
+        this(BASEBAND_FILTER_PASS_BAND, BASEBAND_FILTER_STOP_BAND);
+    }
+
+    /**
+     * Constructs an instance with a channel (baseband) filter other than the default.  A narrower channel filter
+     * passes less noise into the FM discriminator, which helps weak signals but can cost decodes on strong ones.
+     * @param basebandPassBand Hertz
+     * @param basebandStopBand Hertz
+     */
+    public P25P1DecoderC4FM(double basebandPassBand, double basebandStopBand)
+    {
+        mBasebandFilterPassBand = basebandPassBand;
+        mBasebandFilterStopBand = basebandStopBand;
         // Limit consecutive DUID corrections for C4FM. Corrections recover genuine voice frames
         // where the NID BCH decoded TDU instead of LDU (~10% improvement on LFD). The limit
         // breaks the correction cycling that generates noise LDUs after call ends. DUID-corrected
@@ -166,8 +182,8 @@ public class P25P1DecoderC4FM extends FeedbackDecoder implements IByteBufferProv
         mReceiveFilter = new RealFIRFilter(receiveFilterTaps);
         mReliability = new FMDiscriminatorReliability(receiveFilterTaps);
 
-        float[] basebandTaps = FilterFactory.getRemezLowPass(decimatedSampleRate, BASEBAND_FILTER_PASS_BAND,
-                BASEBAND_FILTER_STOP_BAND);
+        float[] basebandTaps = FilterFactory.getRemezLowPass(decimatedSampleRate, mBasebandFilterPassBand,
+                mBasebandFilterStopBand);
         mBasebandFilterI = FilterFactory.getRealFilter(basebandTaps);
         mBasebandFilterQ = FilterFactory.getRealFilter(basebandTaps);
 

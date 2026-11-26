@@ -825,6 +825,9 @@ tasks.register('runDecodeScore', JavaExec) {
     if(project.hasProperty('forceNac')) {
         argsList.addAll(['--force-nac', project.property('forceNac')])
     }
+    if(project.hasProperty('noGate')) {
+        jvmArgs += '-Dp25.voice.quality.gate=false'
+    }
     if(project.hasProperty('diag')) {
         argsList.add('--diag')
     }
@@ -963,6 +966,9 @@ tasks.register('runRegression', JavaExec) {
     if(project.hasProperty('jmbe')) {
         argsList.addAll(['--jmbe', project.property('jmbe')])
     }
+    if(project.hasProperty('diversity')) {
+        jvmArgs += '-Dp25.c4fm.diversity=true'
+    }
     if(project.hasProperty('update')) {
         argsList.add('--update')
     }
@@ -1014,6 +1020,9 @@ tasks.register('runPipelineReplay', JavaExec) {
     if(project.hasProperty('audioOut')) {
         argsList.addAll(['--audio-out', project.property('audioOut')])
     }
+    if(project.hasProperty('noGate')) {
+        jvmArgs += '-Dp25.voice.quality.gate=false'
+    }
     if(project.hasProperty('diag')) {
         jvmArgs += '-Dp25.diag=true'
     }
@@ -1054,4 +1063,17 @@ tasks.register('runRdioUnitsReplay', JavaExec) {
         argsList.addAll(['--max-files', project.property('maxFiles')])
     }
     args = argsList
+}
+
+/**
+ * Known-truth evaluation of the P25 C4FM weak-signal diversity decoder: decodes a noise-degraded copy of a clean capture
+ * with the standard and the diversity decoder and scores both against the clean capture's voice frames.
+ * Usage: ./gradlew runDiversityProbe -Preference=clean.wav -Pdegraded=noisy.wav -Pnac=2144
+ */
+tasks.register('runDiversityProbe', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.dsheirer.module.decode.p25.phase1.DiversityProbe'
+    jvmArgs = os.isWindows() ? jvmArgsWindows : jvmArgsLinux
+    args = [project.findProperty('reference'), project.findProperty('degraded'), project.findProperty('nac') ?: '0']
 }

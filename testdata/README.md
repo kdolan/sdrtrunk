@@ -13,6 +13,12 @@ committed baseline, exiting non-zero if anything got worse.
 Without `-Pjmbe` the decode metrics still run, but every audio metric reads zero — the JMBE codec is
 what turns IMBE frames into audio. Supply it whenever the audio gates matter.
 
+`-Pdiversity` runs the P25 C4FM channels through the weak-signal diversity decoder
+(`P25P1DecoderC4FMDiversity`) instead of the standard one, against the same baseline. It must not fall below it either:
+the primary decode is unchanged, so only the audio metrics may move, and only up. `DiversityCorpusTest` checks that
+messages and every error-free voice frame are identical between the two decoders, and `runDiversityProbe` scores both
+against a clean capture when given a noise-degraded copy of it.
+
 To accept a change as the new gold standard — only after confirming the deltas are genuine
 improvements:
 

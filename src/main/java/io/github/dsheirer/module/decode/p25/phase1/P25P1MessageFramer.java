@@ -589,9 +589,16 @@ public class P25P1MessageFramer extends C4FMMessageFramer
         if(message != null)
         {
             //An LDU that was forced to complete carries zero padding after the bits that were received
-            if(message instanceof LDUMessage ldu && receivedBitCount < cbm.size())
+            if(message instanceof LDUMessage ldu)
             {
-                ldu.setReceivedBitCount(receivedBitCount);
+                if(receivedBitCount < cbm.size())
+                {
+                    ldu.setReceivedBitCount(receivedBitCount);
+                }
+                else
+                {
+                    ldu.setSoftSymbols(mMessageAssembler.getSoftSymbols(0, cbm.size()));
+                }
             }
 
             // Mark messages whose DUID was corrected by context-aware prediction.

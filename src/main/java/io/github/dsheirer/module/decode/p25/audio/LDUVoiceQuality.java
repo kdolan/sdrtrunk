@@ -45,6 +45,8 @@ public class LDUVoiceQuality
     private static final int MIN_CLEAN_FRAMES = 3;
     private static final int WINDOW_LDUS = 3;
     private static final float MIN_WINDOW_CLEAN_FRACTION = 0.20f;
+    //Evaluation only: -Dp25.voice.quality.gate=false decodes every received LDU, as before this gate existed
+    private static final boolean GATE_DISABLED = "false".equals(System.getProperty("p25.voice.quality.gate"));
 
     private final int[] mWindowClean = new int[WINDOW_LDUS];
     private final int[] mWindowReceived = new int[WINDOW_LDUS];
@@ -100,6 +102,12 @@ public class LDUVoiceQuality
         {
             //Truncated before any voice frame was received: nothing to assess or decode
             return false;
+        }
+
+        if(GATE_DISABLED)
+        {
+            mCallAudioStarted = true;
+            return true;
         }
 
         mWindowClean[mWindowIndex] = clean;

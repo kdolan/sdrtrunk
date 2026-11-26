@@ -47,6 +47,48 @@ public abstract class LDUMessage extends P25P1Message
     private List<byte[]> mIMBIFrames;
     private List<CorrectedIMBEFrame> mCorrectedIMBEFrames;
     private int mReceivedBitCount = -1;
+    private float[] mSoftSymbols;
+
+    /**
+     * Sets the demodulated soft symbols (radians, one per dibit, status symbols removed) that the message bits were
+     * decided from, for soft decision decoding of the voice frames.
+     */
+    public void setSoftSymbols(float[] softSymbols)
+    {
+        mSoftSymbols = softSymbols;
+    }
+
+    /**
+     * Soft symbols for the message dibits, or null when the demodulator didn't provide them.
+     */
+    public float[] getSoftSymbols()
+    {
+        return mSoftSymbols;
+    }
+
+    /**
+     * Replaces the raw IMBE voice frame at the index, for a better version of the frame from another decode of the
+     * same transmission.  Only the voice frame changes: link control, encryption sync and low speed data still come
+     * from this message's own bits.
+     * @param index of the frame, 0-8
+     * @param frame raw 144-bit frame bytes, as from getIMBEFrames()
+     */
+    public synchronized void replaceIMBEFrame(int index, byte[] frame)
+    {
+        getIMBEFrames().set(index, frame);
+        mCorrectedIMBEFrames = null;
+        mReplacedIMBEFrameCount++;
+    }
+
+    /**
+     * Number of voice frames replaced through replaceIMBEFrame().
+     */
+    public int getReplacedIMBEFrameCount()
+    {
+        return mReplacedIMBEFrameCount;
+    }
+
+    private int mReplacedIMBEFrameCount = 0;
 
     /**
      * Sets the number of message bits that were received before the framer forced this LDU to complete because the

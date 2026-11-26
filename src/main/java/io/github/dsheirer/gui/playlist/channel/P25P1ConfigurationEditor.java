@@ -86,6 +86,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
     // Pipeline diagnostics
     private ToggleSwitch mPipelineDiagnosticsSwitch;
     private Label mPipelineDiagnosticsLabel;
+    private ToggleSwitch mWeakSignalDiversitySwitch;
 
     // LSM v2 channel options
     private ToggleSwitch mIgnoreEncryptionSwitch;
@@ -294,6 +295,18 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
 
             GridPane.setConstraints(getPipelineDiagnosticsSwitch(), 1, 9);
             gridPane.getChildren().add(getPipelineDiagnosticsSwitch());
+
+            // Weak-signal diversity (row 10) - C4FM only
+            Label weakSignalLabel = new Label("Weak-Signal Diversity (C4FM):");
+            weakSignalLabel.setTooltip(new Tooltip("Also decode voice on secondary tracks with narrower channel " +
+                "filters and pick the best version of each\nvoice frame the normal decode got wrong.  Recovers voice " +
+                "from weak transmissions; the normal decode is unchanged.\nUses extra CPU for this channel."));
+            GridPane.setHalignment(weakSignalLabel, HPos.RIGHT);
+            GridPane.setConstraints(weakSignalLabel, 0, 10);
+            gridPane.getChildren().add(weakSignalLabel);
+
+            GridPane.setConstraints(getWeakSignalDiversitySwitch(), 1, 10);
+            gridPane.getChildren().add(getWeakSignalDiversitySwitch());
 
             // Update visibility based on modulation selection
             updateLSMv2OptionsVisibility();
@@ -640,6 +653,18 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         return mPipelineDiagnosticsSwitch;
     }
 
+    private ToggleSwitch getWeakSignalDiversitySwitch()
+    {
+        if(mWeakSignalDiversitySwitch == null)
+        {
+            mWeakSignalDiversitySwitch = new ToggleSwitch();
+            mWeakSignalDiversitySwitch.setDisable(true);
+            mWeakSignalDiversitySwitch.selectedProperty()
+                .addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));
+        }
+        return mWeakSignalDiversitySwitch;
+    }
+
     private ToggleSwitch getIgnoreEncryptionSwitch()
     {
         if(mIgnoreEncryptionSwitch == null)
@@ -798,6 +823,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         getCmaTrackingMuSpinner().setDisable(!enabled);
         getCmaGearShiftMsSpinner().setDisable(!enabled);
         getPipelineDiagnosticsSwitch().setDisable(!enabled);
+        getWeakSignalDiversitySwitch().setDisable(!enabled);
         getIgnoreEncryptedCallsButton().setDisable(!enabled);
 
         if(config instanceof DecodeConfigP25Phase1 decodeConfig)
@@ -807,6 +833,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             getTrafficChannelPoolSizeSpinner().getValueFactory().setValue(decodeConfig.getTrafficChannelPoolSize());
             getNACSpinner().getValueFactory().setValue(decodeConfig.getConfiguredNAC());
             getPipelineDiagnosticsSwitch().setSelected(decodeConfig.isPipelineDiagnostics());
+            getWeakSignalDiversitySwitch().setSelected(decodeConfig.isWeakSignalDiversity());
 
             // LSM v2 options
             getIgnoreEncryptionSwitch().setSelected(decodeConfig.isIgnoreEncryptionState());
@@ -858,6 +885,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             getCmaTrackingMuSpinner().getValueFactory().setValue(0.0);
             getCmaGearShiftMsSpinner().getValueFactory().setValue(0);
             getPipelineDiagnosticsSwitch().setSelected(false);
+            getWeakSignalDiversitySwitch().setSelected(false);
             getJmbeAGCButton().setDisable(true);
             getJmbeNoiseGainSlider().setDisable(true);
             getJmbeToneGainSlider().setDisable(true);
@@ -888,6 +916,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         config.setTrafficChannelPoolSize(getTrafficChannelPoolSizeSpinner().getValue());
         config.setConfiguredNAC(getNACSpinner().getValue());
         config.setPipelineDiagnostics(getPipelineDiagnosticsSwitch().isSelected());
+        config.setWeakSignalDiversity(getWeakSignalDiversitySwitch().isSelected());
 
         // LSM v2 options
         config.setIgnoreEncryptionState(getIgnoreEncryptionSwitch().isSelected());

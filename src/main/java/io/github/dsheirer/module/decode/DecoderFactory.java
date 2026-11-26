@@ -97,6 +97,7 @@ import io.github.dsheirer.module.decode.p25.audio.P25P2AudioModule;
 import io.github.dsheirer.module.decode.p25.phase1.DecodeConfigP25Phase1;
 import io.github.dsheirer.module.decode.p25.phase1.P25PipelineDiagnostics;
 import io.github.dsheirer.module.decode.p25.phase1.P25P1DecoderC4FM;
+import io.github.dsheirer.module.decode.p25.phase1.P25P1DecoderC4FMDiversity;
 import io.github.dsheirer.module.decode.p25.phase1.P25P1DecoderC4FMv2;
 import io.github.dsheirer.module.decode.p25.phase1.P25P1DecoderLSM;
 import io.github.dsheirer.module.decode.p25.phase1.P25P1DecoderLSMv2;
@@ -331,6 +332,17 @@ public class DecoderFactory
             switch(p1.getModulation())
             {
                 case C4FM:
+                    if(p1.isWeakSignalDiversity())
+                    {
+                        P25P1DecoderC4FMDiversity diversityDecoder = new P25P1DecoderC4FMDiversity();
+                        if(p1.hasConfiguredNAC())
+                        {
+                            diversityDecoder.setConfiguredNAC(p1.getConfiguredNAC());
+                            diversityDecoder.setMaxBchErrors(p1.getMaxBchErrors());
+                        }
+                        modules.add(diversityDecoder);
+                        break;
+                    }
                     P25P1DecoderC4FM c4fmDecoder = new P25P1DecoderC4FM();
                     if(p1.hasConfiguredNAC())
                     {

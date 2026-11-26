@@ -76,6 +76,7 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     private int mConfiguredNAC = 0; // 0 = auto-detect, 1-4095 = configured NAC
     private int mAudioHoldoverMs = DEFAULT_AUDIO_HOLDOVER_MS;
     private boolean mIgnoreEncryptionState = false;
+    private boolean mWeakSignalDiversity = false;
     private int mMaxImbeErrors = 0; // 0 = disabled, 1-10 = quality gate threshold
     private int mMaxBchErrors = MAX_BCH_ERRORS_DEFAULT;
     private float mCmaAcquisitionMu = 0.003f; // Fast convergence for initial lock after cold-start
@@ -249,6 +250,21 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     public void setIgnoreEncryptionState(boolean ignore)
     {
         mIgnoreEncryptionState = ignore;
+    }
+
+    /**
+     * Indicates if C4FM voice is also decoded on secondary tracks with narrower channel filters, to recover voice
+     * frames of weak transmissions (see P25P1DecoderC4FMDiversity).  The primary decode is unchanged.
+     */
+    @JacksonXmlProperty(isAttribute = true, localName = "weakSignalDiversity")
+    public boolean isWeakSignalDiversity()
+    {
+        return mWeakSignalDiversity;
+    }
+
+    public void setWeakSignalDiversity(boolean enabled)
+    {
+        mWeakSignalDiversity = enabled;
     }
 
     @JacksonXmlProperty(isAttribute = true, localName = "pipelineDiagnostics")
