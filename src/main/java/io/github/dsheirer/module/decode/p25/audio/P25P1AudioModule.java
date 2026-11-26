@@ -78,16 +78,18 @@ public class P25P1AudioModule extends ImbeAudioModule
     // Unrecoverable LDU gate.  Below roughly 6 dB in-band SNR the voice frames arrive as near-random bits while the
     // sync, NAC and link control still decode, so the call is accepted.  JMBE mutes most of those frames and lets the
     // odd one through, which comes out as isolated clicks in an otherwise silent call.  The corrected-frame error
-    // totals are bimodal: clean LDUs sum to 0-45 across their 9 frames, these LDUs to 80-135.  An LDU at or above the
-    // threshold with fewer than MIN_CLEAN_FRAMES clean frames carries no recoverable voice: it is not decoded, and the
-    // call does not start its audio on one, so a call that is unrecoverable from start to finish produces no audio
-    // segment (its call event is still logged).  An LDU that the framer truncated is judged on its received frames.
-    // System property p25.unrecoverable.ldu.errors: 0 disables the gate (truncated LDU padding is still dropped).
+    // totals of most of these LDUs total 80-135 across their 9 frames, against 0-45 for clean ones; isUnrecoverable()
+    // is that single-LDU test.  LDUVoiceQuality adds a window of the call's last 3 LDUs, which catches the weak LDUs that
+    // total less.  An LDU it rejects is not decoded, and a call doesn't start its audio on one, so a call that is
+    // unrecoverable from start to finish produces no audio segment (its call event is still logged).  An LDU that the
+    // framer truncated is judged on its received frames.
+    // System property p25.unrecoverable.ldu.errors: 0 disables the error total test (truncated LDU padding is still
+    // dropped).
     public static final int UNRECOVERABLE_LDU_ERROR_TOTAL =
             Integer.parseInt(System.getProperty("p25.unrecoverable.ldu.errors", "72"));
     private static final int CLEAN_FRAME_MAX_ERRORS = 3;
     private static final int MIN_CLEAN_FRAMES = 3;
-    private boolean mCallAudioStarted = false;
+    private final LDUVoiceQuality mVoiceQuality = new LDUVoiceQuality();
     private boolean mCodecResetPending = false;
 
     private SquelchStateListener mSquelchStateListener = new SquelchStateListener();
@@ -337,7 +339,7 @@ public class P25P1AudioModule extends ImbeAudioModule
             // reset before the next good frame so that it doesn't synthesize from parameters of the bad run.  Only
             // the received frames get silence: the zero padding of a truncated LDU took up no air time, because the
             // next frame's sync arrived in its place.
-            if(isUnrecoverable(ldu))
+            if(!mVoiceQuality.accept(ldu))
             {
                 mCodecResetPending = true;
                 addSilence(getReceivedFrameCount(ldu));
@@ -345,7 +347,7 @@ public class P25P1AudioModule extends ImbeAudioModule
                 if(P25PipelineDiagnostics.isEnabled())
                 {
                     P25PipelineDiagnostics.log("AUDIO", "AUDIO_MOD", "LDU_UNRECOVERABLE",
-                        ldu.getDUID().name() + " errors=" + getErrorTotal(ldu) + " callAudioStarted=" + mCallAudioStarted);
+                        ldu.getDUID().name() + " errors=" + getErrorTotal(ldu) + " callAudioStarted=" + mVoiceQuality.isCallAudioStarted());
                 }
                 return;
             }
@@ -355,8 +357,6 @@ public class P25P1AudioModule extends ImbeAudioModule
                 getAudioCodec().reset();
                 mCodecResetPending = false;
             }
-
-            mCallAudioStarted = true;
 
             List<byte[]> frames = ldu.getIMBEFrames();
 
@@ -442,7 +442,7 @@ public class P25P1AudioModule extends ImbeAudioModule
             mTotalFrameCount++;
             mConsecutiveGatedFrames++;
 
-            if(mCallAudioStarted)
+            if(mVoiceQuality.isCallAudioStarted())
             {
                 addAudio(new float[FRAME_SAMPLE_COUNT]);
             }
@@ -583,7 +583,7 @@ public class P25P1AudioModule extends ImbeAudioModule
         mAdaptiveWindowIndex = 0;
         mAdaptivePassCount = 0;
         mAdaptiveGateDisabled = false;
-        mCallAudioStarted = false;
+        mVoiceQuality.reset();
         mCodecResetPending = false;
     }
 

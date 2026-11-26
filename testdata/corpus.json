@@ -247,6 +247,19 @@
     "note": "clean calls (~12 dB) with a truncated phantom LDU2 at call start and a 138-bit LDU stub at call end"
   },
   {
+    "channel": "p25-c4fm-g",
+    "file": "p25-c4fm-g_03_100000010_baseband.wav",
+    "decoder": "P25P1",
+    "modulation": "C4FM",
+    "nac": 2144,
+    "bandwidth": null,
+    "frequency": 100000010,
+    "seconds": 24.5,
+    "megabytes": 4.7,
+    "trimmed": false,
+    "note": "weak unit at ~5 dB: LDUs below the single-LDU error threshold but almost no clean frames; must produce no audio"
+  },
+  {
     "channel": "nbfm-mdc-a",
     "file": "nbfm-mdc-a_01_100000008_baseband.wav",
     "decoder": "NBFM",

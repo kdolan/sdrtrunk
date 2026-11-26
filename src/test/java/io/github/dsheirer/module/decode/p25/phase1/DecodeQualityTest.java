@@ -45,7 +45,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import io.github.dsheirer.module.decode.p25.audio.P25P1AudioModule;
+import io.github.dsheirer.module.decode.p25.audio.LDUVoiceQuality;
 import java.util.Map;
 import javax.xml.parsers.DocumentBuilderFactory;
 import org.w3c.dom.Document;
@@ -588,6 +588,8 @@ public class DecodeQualityTest
         List<float[]> audioBuffers = new ArrayList<>();
         List<Long> lduTimestamps = new ArrayList<>();
         int[] gatedFrames = {0};
+        LDUVoiceQuality voiceQuality = new LDUVoiceQuality();
+        long[] lastLduTimestamp = {0};
         float[][] lastGoodFrame = {null};
         int[] consecutiveGated = {0};
         int fadeStart = 9, fadeLength = 9;
@@ -599,9 +601,21 @@ public class DecodeQualityTest
         boolean[] adaptiveDisabled = {false};
 
         Listener<IMessage> listener = msg -> {
-            //Skip DUID-corrected and unrecoverable LDUs, which the live P25P1AudioModule replaces with silence
+            //A gap of more than a second between LDUs is a new call, as a squelch is for the live audio module
+            if(msg instanceof LDUMessage gapLdu && !lduTimestamps.isEmpty() &&
+               gapLdu.getTimestamp() - lastLduTimestamp[0] > 1000)
+            {
+                voiceQuality.reset();
+            }
+            if(msg instanceof LDUMessage timedLdu)
+            {
+                lastLduTimestamp[0] = timedLdu.getTimestamp();
+            }
+
+            //Skip DUID-corrected LDUs and LDUs without recoverable voice, which the live P25P1AudioModule replaces with
+            //silence
             if(msg instanceof LDUMessage ldu && ((P25P1Message)msg).isValid() && !ldu.isDuidCorrected() &&
-               !P25P1AudioModule.isUnrecoverable(ldu))
+               voiceQuality.accept(ldu))
             {
                 lduTimestamps.add(((P25P1Message)msg).getTimestamp());
                 List<byte[]> imbeFrames = ldu.getIMBEFrames();

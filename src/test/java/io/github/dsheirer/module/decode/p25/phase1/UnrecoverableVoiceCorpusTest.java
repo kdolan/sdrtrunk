@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import io.github.dsheirer.module.decode.p25.audio.LDUVoiceQuality;
 import io.github.dsheirer.module.decode.p25.audio.P25P1AudioModule;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDUMessage;
 import io.github.dsheirer.sample.complex.ComplexSamples;
@@ -42,6 +43,9 @@ import org.junit.jupiter.api.Test;
  * - p25-c4fm-g_02: clean calls at ~12 dB.  At call start a false sync starts a phantom LDU2 that the real LDU2's sync
  *   truncates, and at call end an LDU stub is truncated after 138 bits.  The truncated LDUs must be flagged and
  *   suppressed while the real voice LDUs stay recoverable.
+ * - p25-c4fm-g_03: the same unit at ~5 dB.  Many of its LDUs total fewer errors than the single-LDU threshold, so only
+ *   the call-level clean-frame window (LDUVoiceQuality) catches them: before it, this call came out as an audio segment
+ *   of silence and odd clicks.  LDUVoiceQuality must accept none of the LDUs of either weak call.
  */
 public class UnrecoverableVoiceCorpusTest
 {
@@ -95,6 +99,52 @@ public class UnrecoverableVoiceCorpusTest
 
         long recoverable = ldus.stream().filter(ldu -> !P25P1AudioModule.isUnrecoverable(ldu)).count();
         assertEquals(0, recoverable, "every LDU of the weak call is unrecoverable voice");
+    }
+
+    /**
+     * Runs the LDUs through LDUVoiceQuality as the audio module does, starting a new call at a gap of more than a
+     * second, and counts the accepted LDUs.
+     */
+    private static long accepted(List<LDUMessage> ldus)
+    {
+        LDUVoiceQuality quality = new LDUVoiceQuality();
+        long previous = 0;
+        long accepted = 0;
+
+        for(LDUMessage ldu: ldus)
+        {
+            if(previous > 0 && ldu.getTimestamp() - previous > 1000)
+            {
+                quality.reset();
+            }
+            previous = ldu.getTimestamp();
+
+            if(quality.accept(ldu))
+            {
+                accepted++;
+            }
+        }
+
+        return accepted;
+    }
+
+    @Test
+    public void weakCallsProduceNoAudio() throws Exception
+    {
+        for(String clip: List.of("p25-c4fm-g_01_100000010_baseband.wav", "p25-c4fm-g_03_100000010_baseband.wav"))
+        {
+            List<LDUMessage> ldus = decode(clip);
+            assertTrue(ldus.size() >= 20, clip + " LDUs still decode: " + ldus.size());
+            assertEquals(0, accepted(ldus), clip + ": no LDU of a weak call is decoded for audio");
+        }
+    }
+
+    @Test
+    public void cleanCallsAreDecodedByTheCallLevelRule() throws Exception
+    {
+        List<LDUMessage> ldus = decode("p25-c4fm-g_02_100000010_baseband.wav");
+        long recoverable = ldus.stream().filter(ldu -> !P25P1AudioModule.isUnrecoverable(ldu)).count();
+        assertEquals(recoverable, accepted(ldus), "the call window rejects nothing the single-LDU test accepts");
     }
 
     @Test
