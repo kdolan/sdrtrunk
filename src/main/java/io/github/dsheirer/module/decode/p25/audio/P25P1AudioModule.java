@@ -91,6 +91,7 @@ public class P25P1AudioModule extends ImbeAudioModule
     private static final int MIN_CLEAN_FRAMES = 3;
     private final LDUVoiceQuality mVoiceQuality = new LDUVoiceQuality();
     private boolean mCodecResetPending = false;
+    private int mPendingSilenceFrames = 0;
 
     private SquelchStateListener mSquelchStateListener = new SquelchStateListener();
     // ponytail: fixed +6 dB; upstream #2489 dropped the old 5x hard-clipped gain entirely. Level processing beyond
@@ -406,11 +407,11 @@ public class P25P1AudioModule extends ImbeAudioModule
                                     repeated[i] *= fade;
                                 }
                             }
-                            addAudio(repeated);
+                            addVoice(repeated);
                         }
                         else
                         {
-                            addAudio(new float[FRAME_SAMPLE_COUNT]);
+                            addVoice(new float[FRAME_SAMPLE_COUNT]);
                         }
                         continue;
                     }
@@ -421,7 +422,7 @@ public class P25P1AudioModule extends ImbeAudioModule
 
                 float[] audio = getAudio(frame, correctedFrames != null ? correctedFrames.get(x) : null);
                 mLastGoodFrame = audio.clone();
-                addAudio(audio);
+                addVoice(audio);
             }
         }
         else
@@ -444,9 +445,26 @@ public class P25P1AudioModule extends ImbeAudioModule
 
             if(mVoiceQuality.isCallAudioStarted())
             {
-                addAudio(new float[FRAME_SAMPLE_COUNT]);
+                mPendingSilenceFrames++;
             }
         }
+    }
+
+    /**
+     * Adds a frame of the call's audio, first writing out any silence held for LDUs that carried no voice.  Silence is
+     * held rather than written so that it only keeps the timing between pieces of voice: silence after the last voice
+     * of a call is never written, which would otherwise leave a call whose voice was a short fragment as a segment of
+     * mostly silence.
+     */
+    private void addVoice(float[] audio)
+    {
+        while(mPendingSilenceFrames > 0)
+        {
+            addAudio(new float[FRAME_SAMPLE_COUNT]);
+            mPendingSilenceFrames--;
+        }
+
+        addAudio(audio);
     }
 
     /**
@@ -585,6 +603,7 @@ public class P25P1AudioModule extends ImbeAudioModule
         mAdaptiveGateDisabled = false;
         mVoiceQuality.reset();
         mCodecResetPending = false;
+        mPendingSilenceFrames = 0;
     }
 
     /**
