@@ -32,6 +32,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.Separator;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.SpinnerValueFactory;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import org.controlsfx.control.ToggleSwitch;
@@ -46,6 +47,11 @@ import java.util.List;
  */
 public class RecordConfigurationEditor extends Editor<RecordConfiguration>
 {
+    public static final String ACTIVITY_MARGIN_TOOLTIP = "Activity-triggered recording captures a clip when the power " +
+        "on this channel rises this many dB above the channel's noise floor.  Only the centre of the channel is " +
+        "measured, so traffic on neighbouring channels doesn't trigger it.  5 dB catches even transmissions too weak " +
+        "to decode; raise it to record only stronger signals.";
+
     private List<RecorderControl> mControls = new ArrayList<>();
     private ToggleSwitch mActivityToggle;
     private Spinner<Integer> mThresholdSpinner;
@@ -81,10 +87,13 @@ public class RecordConfigurationEditor extends Editor<RecordConfiguration>
         activityPane.getChildren().add(activityLabel);
         getChildren().add(activityPane);
 
-        mThresholdLabel = new Label("Squelch Threshold (dB):");
-        mThresholdSpinner = new Spinner<>(new SpinnerValueFactory.IntegerSpinnerValueFactory(-100, -30, -70, 1));
+        mThresholdLabel = new Label("Trigger Above Channel Noise (dB):");
+        mThresholdSpinner = new Spinner<>(new SpinnerValueFactory.IntegerSpinnerValueFactory(
+            (int)RecordConfiguration.MIN_ACTIVITY_TRIGGER_MARGIN_DB, (int)RecordConfiguration.MAX_ACTIVITY_TRIGGER_MARGIN_DB,
+            (int)RecordConfiguration.DEFAULT_ACTIVITY_TRIGGER_MARGIN_DB, 1));
         mThresholdSpinner.setEditable(true);
         mThresholdSpinner.setPrefWidth(80);
+        mThresholdSpinner.setTooltip(new Tooltip(ACTIVITY_MARGIN_TOOLTIP));
         mThresholdSpinner.valueProperty().addListener((obs, oldVal, newVal) -> modifiedProperty().set(true));
 
         HBox thresholdBox = new HBox(10, mThresholdLabel, mThresholdSpinner);
@@ -120,7 +129,7 @@ public class RecordConfigurationEditor extends Editor<RecordConfiguration>
 
         mActivityToggle.setDisable(false);
         mActivityToggle.setSelected(item.isActivityTriggeredRecording());
-        mThresholdSpinner.getValueFactory().setValue(Math.round(item.getActivitySquelchThreshold()));
+        mThresholdSpinner.getValueFactory().setValue(Math.round(item.getActivityTriggerMarginDb()));
         updateThresholdVisibility(item.isActivityTriggeredRecording());
 
         modifiedProperty().set(false);
@@ -150,7 +159,7 @@ public class RecordConfigurationEditor extends Editor<RecordConfiguration>
 
         if(mActivityToggle.isSelected())
         {
-            config.setActivitySquelchThreshold(mThresholdSpinner.getValue().floatValue());
+            config.setActivityTriggerMarginDb(mThresholdSpinner.getValue().floatValue());
         }
 
         setItem(config);

@@ -32,6 +32,9 @@ import java.util.List;
 public class RecordConfiguration extends Configuration
 {
     public static final float DEFAULT_ACTIVITY_SQUELCH_THRESHOLD = -70.0f;
+    public static final float DEFAULT_ACTIVITY_TRIGGER_MARGIN_DB = 5.0f;
+    public static final float MIN_ACTIVITY_TRIGGER_MARGIN_DB = 2.0f;
+    public static final float MAX_ACTIVITY_TRIGGER_MARGIN_DB = 30.0f;
 
     /**
      * Recording types requested for this configuration
@@ -39,6 +42,7 @@ public class RecordConfiguration extends Configuration
     private List<RecorderType> mRecorders = new ArrayList<>();
     private boolean mActivityTriggeredRecording = false;
     private float mActivitySquelchThreshold = DEFAULT_ACTIVITY_SQUELCH_THRESHOLD;
+    private float mActivityTriggerMarginDb = DEFAULT_ACTIVITY_TRIGGER_MARGIN_DB;
 
     /**
      * Constructs a recording configuration instance
@@ -127,6 +131,29 @@ public class RecordConfiguration extends Configuration
     public void setActivitySquelchThreshold(float threshold)
     {
         mActivitySquelchThreshold = Math.max(-100.0f, Math.min(-30.0f, threshold));
+    }
+
+    /**
+     * Margin in dB that the in-channel power must exceed the channel's tracked noise floor by to trigger an
+     * activity-triggered recording.  This replaces the absolute squelch threshold, which measured power across the
+     * whole channelized baseband and so triggered on neighbouring channels.  The threshold attribute is still read and
+     * written so that the playlist stays compatible with older builds, but recording no longer uses it.
+     * @return margin in dB (default 5.0)
+     */
+    @JacksonXmlProperty(isAttribute = true, localName = "activityTriggerMarginDb")
+    public float getActivityTriggerMarginDb()
+    {
+        return mActivityTriggerMarginDb;
+    }
+
+    /**
+     * Sets the activity-triggered recording margin above the channel noise floor, limited to 2-30 dB.
+     * @param marginDb in dB
+     */
+    public void setActivityTriggerMarginDb(float marginDb)
+    {
+        mActivityTriggerMarginDb = Math.max(MIN_ACTIVITY_TRIGGER_MARGIN_DB,
+                Math.min(MAX_ACTIVITY_TRIGGER_MARGIN_DB, marginDb));
     }
 
     /**

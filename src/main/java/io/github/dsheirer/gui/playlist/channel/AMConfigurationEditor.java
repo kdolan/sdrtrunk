@@ -39,6 +39,7 @@ import io.github.dsheirer.settings.Settings;
 import io.github.dsheirer.settings.identifier.IntegerFormat;
 import io.github.dsheirer.protocol.Protocol;
 import io.github.dsheirer.record.RecorderType;
+import io.github.dsheirer.gui.playlist.record.RecordConfigurationEditor;
 import io.github.dsheirer.record.config.RecordConfiguration;
 import io.github.dsheirer.source.config.SourceConfiguration;
 import io.github.dsheirer.source.tuner.manager.TunerManager;
@@ -235,7 +236,7 @@ public class AMConfigurationEditor extends ChannelConfigurationEditor
             GridPane.setConstraints(getActivityThresholdSpinner(), 0, 3);
             gridPane.getChildren().add(getActivityThresholdSpinner());
 
-            Label thresholdLabel = new Label("Activity Squelch Threshold (dB)");
+            Label thresholdLabel = new Label("Trigger Above Channel Noise (dB)");
             GridPane.setHalignment(thresholdLabel, HPos.LEFT);
             GridPane.setConstraints(thresholdLabel, 1, 3);
             gridPane.getChildren().add(thresholdLabel);
@@ -314,12 +315,12 @@ public class AMConfigurationEditor extends ChannelConfigurationEditor
     {
         if(mActivityThresholdSpinner == null)
         {
-            mActivityThresholdSpinner = new Spinner<>(-100, -30,
-                (int)RecordConfiguration.DEFAULT_ACTIVITY_SQUELCH_THRESHOLD, 5);
+            mActivityThresholdSpinner = new Spinner<>((int)RecordConfiguration.MIN_ACTIVITY_TRIGGER_MARGIN_DB,
+                (int)RecordConfiguration.MAX_ACTIVITY_TRIGGER_MARGIN_DB,
+                (int)RecordConfiguration.DEFAULT_ACTIVITY_TRIGGER_MARGIN_DB, 1);
             mActivityThresholdSpinner.setEditable(true);
             mActivityThresholdSpinner.setDisable(true);
-            mActivityThresholdSpinner.setTooltip(new Tooltip("RF power level (dB) above which activity-triggered " +
-                "recording captures a clip"));
+            mActivityThresholdSpinner.setTooltip(new Tooltip(RecordConfigurationEditor.ACTIVITY_MARGIN_TOOLTIP));
             mActivityThresholdSpinner.valueProperty()
                 .addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));
         }
@@ -573,7 +574,7 @@ public class AMConfigurationEditor extends ChannelConfigurationEditor
 
             getActivityRecordSwitch().setDisable(false);
             getActivityRecordSwitch().selectedProperty().set(config.isActivityTriggeredRecording());
-            getActivityThresholdSpinner().getValueFactory().setValue((int)config.getActivitySquelchThreshold());
+            getActivityThresholdSpinner().getValueFactory().setValue(Math.round(config.getActivityTriggerMarginDb()));
             getActivityThresholdSpinner().setDisable(!config.isActivityTriggeredRecording());
         }
         else
@@ -598,7 +599,7 @@ public class AMConfigurationEditor extends ChannelConfigurationEditor
         }
 
         config.setActivityTriggeredRecording(getActivityRecordSwitch().selectedProperty().get());
-        config.setActivitySquelchThreshold(getActivityThresholdSpinner().getValue());
+        config.setActivityTriggerMarginDb(getActivityThresholdSpinner().getValue());
 
         getItem().setRecordConfiguration(config);
     }

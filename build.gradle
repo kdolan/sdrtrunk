@@ -899,6 +899,26 @@ tasks.register('runMdcReplay', JavaExec) {
 }
 
 /**
+ * Activity trigger replay: runs the activity-triggered recorder's in-channel detector over baseband captures, to dial
+ * in a channel's trigger margin.
+ * Usage: ./gradlew runActivityTriggerReplay -Psamples=path [-Pmargin=5] [-Pbandwidth=12500]
+ */
+tasks.register('runActivityTriggerReplay', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.dsheirer.record.wave.ActivityTriggerReplay'
+    if(os.isWindows()) {
+        jvmArgs = jvmArgsWindows
+    } else {
+        jvmArgs = jvmArgsLinux
+    }
+    def argsList = [project.hasProperty('samples') ? project.property('samples') : '.']
+    argsList.add(project.hasProperty('margin') ? project.property('margin') : '5')
+    argsList.add(project.hasProperty('bandwidth') ? project.property('bandwidth') : '12500')
+    args = argsList
+}
+
+/**
  * MDC-1200 batch detection evaluator: runs the decoder over a directory of baseband I/Q captures
  * and reports production vs oracle detection counts.
  * Usage: ./gradlew runMdcBatch -Pdir=/home/kdolan/GitHub/sdrtrunk/_recordings [-Pout=build/mdc-eval.txt]

@@ -27,7 +27,9 @@ import io.github.dsheirer.module.decode.p25.audio.P25P1CallSequenceRecorder;
 import io.github.dsheirer.module.decode.p25.audio.P25P2CallSequenceRecorder;
 import io.github.dsheirer.settings.Settings;
 import io.github.dsheirer.record.binary.BinaryRecorder;
+import io.github.dsheirer.module.decode.analog.DecodeConfigAnalog;
 import io.github.dsheirer.record.wave.ActivityTriggeredWaveRecorder;
+import io.github.dsheirer.record.wave.ChannelActivityDetector;
 import io.github.dsheirer.record.wave.ComplexSamplesWaveRecorder;
 import io.github.dsheirer.record.wave.IRecordingStatusListener;
 import io.github.dsheirer.record.wave.NativeBufferWaveRecorder;
@@ -161,13 +163,28 @@ public class RecorderFactory
         if(channel.getRecordConfiguration().isActivityTriggeredRecording())
         {
             long frequency = getFrequency(channel);
-            float threshold = channel.getRecordConfiguration().getActivitySquelchThreshold();
+            float marginDb = channel.getRecordConfiguration().getActivityTriggerMarginDb();
+            double passbandHalfWidth = ChannelActivityDetector.getPassbandHalfWidth(getChannelBandwidth(channel));
             Path recordingDir = getRecordingBasePath(settings);
             recorderModules.add(new ActivityTriggeredWaveRecorder(BASEBAND_SAMPLE_RATE,
-                    channel.toString(), frequency, threshold, recordingDir));
+                    channel.toString(), frequency, marginDb, passbandHalfWidth, recordingDir));
         }
 
         return recorderModules;
+    }
+
+    /**
+     * Channel bandwidth for the activity detector passband: the configured bandwidth of an analog channel, otherwise
+     * 12.5 kHz, the channel width of the digital voice protocols.
+     */
+    private static double getChannelBandwidth(Channel channel)
+    {
+        if(channel.getDecodeConfiguration() instanceof DecodeConfigAnalog analog && analog.getBandwidth() != null)
+        {
+            return analog.getBandwidth().getValue();
+        }
+
+        return 12500.0;
     }
 
     /**

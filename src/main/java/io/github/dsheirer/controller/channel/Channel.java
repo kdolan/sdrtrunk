@@ -189,6 +189,7 @@ public class Channel extends Configuration implements Listener<SourceEvent>
 
             recordCopy.setActivityTriggeredRecording(mRecordConfiguration.isActivityTriggeredRecording());
             recordCopy.setActivitySquelchThreshold(mRecordConfiguration.getActivitySquelchThreshold());
+            recordCopy.setActivityTriggerMarginDb(mRecordConfiguration.getActivityTriggerMarginDb());
         }
 
         channel.setRecordConfiguration(recordCopy);

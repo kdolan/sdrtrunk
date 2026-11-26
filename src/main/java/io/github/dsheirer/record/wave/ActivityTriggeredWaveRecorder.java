@@ -38,9 +38,9 @@ import org.slf4j.LoggerFactory;
 import javax.sound.sampled.AudioFormat;
 
 /**
- * Activity-triggered baseband recorder. Monitors RF signal energy on channelized I/Q samples
- * and records WAV files only when signal activity exceeds the squelch threshold. Maintains a
- * circular pre-trigger buffer and a post-activity hold timer.
+ * Activity-triggered baseband recorder. Monitors signal energy on the channel itself (see ChannelActivityDetector)
+ * and records the channelized I/Q to WAV files only while the in-channel power is more than the trigger margin above
+ * the channel's noise floor. Maintains a circular pre-trigger buffer and a post-activity hold timer.
  *
  * This module is completely independent of the decode pipeline and works with any decoder type.
  */
@@ -51,14 +51,13 @@ public class ActivityTriggeredWaveRecorder extends Module implements IComplexSam
 
     private static final int PRE_BUFFER_DURATION_MS = 2000;
     private static final int HOLD_DURATION_MS = 10000;
-    private static final float POWER_ALPHA = 0.1f;
-    private static final int POWER_LOG_INTERVAL = 100;
+    private static final int POWER_LOG_INTERVAL_BLOCKS = 250;
 
     private enum RecordingState { IDLE, RECORDING, HOLDING }
 
     private final String mChannelName;
     private final long mChannelFrequency;
-    private final float mSquelchThresholdDb;
+    private final ChannelActivityDetector mActivityDetector;
     private final Path mRecordingBaseDir;
 
     private float mSampleRate;
@@ -66,29 +65,29 @@ public class ActivityTriggeredWaveRecorder extends Module implements IComplexSam
     private CircularSampleBuffer mCircularBuffer;
     private WaveWriter mWaveWriter;
     private RecordingState mRecordingState = RecordingState.IDLE;
-    private float mSmoothedPowerDb = -100.0f;
     private long mHoldSamplesRemaining;
     private boolean mRunning;
     private boolean mErrorState;
     private EventBus mEventBus;
     private Path mRecordingDirectory;
-    private int mPowerLogCounter;
+    private long mLastPowerLogBlock;
 
     /**
      * Constructs an instance.
      * @param sampleRate initial sample rate
      * @param channelName for subdirectory and file naming
      * @param channelFrequency for file naming
-     * @param squelchThresholdDb power threshold in dB for activity detection
+     * @param triggerMarginDb that the in-channel power must exceed the channel noise floor by to trigger recording
+     * @param passbandHalfWidthHz in-channel measurement passband either side of the channel centre
      * @param recordingBaseDir base recording directory from user preferences
      */
     public ActivityTriggeredWaveRecorder(float sampleRate, String channelName, long channelFrequency,
-                                         float squelchThresholdDb, Path recordingBaseDir)
+                                         float triggerMarginDb, double passbandHalfWidthHz, Path recordingBaseDir)
     {
         mSampleRate = sampleRate;
         mChannelName = channelName;
         mChannelFrequency = channelFrequency;
-        mSquelchThresholdDb = squelchThresholdDb;
+        mActivityDetector = new ChannelActivityDetector(sampleRate, passbandHalfWidthHz, triggerMarginDb);
         mRecordingBaseDir = recordingBaseDir;
         mAudioFormat = new AudioFormat(sampleRate, 16, 2, true, false);
 
@@ -130,7 +129,7 @@ public class ActivityTriggeredWaveRecorder extends Module implements IComplexSam
         mRunning = true;
         mErrorState = false;
         mRecordingState = RecordingState.IDLE;
-        mSmoothedPowerDb = -100.0f;
+        mActivityDetector.reset();
         initCircularBuffer();
     }
 
@@ -146,7 +145,7 @@ public class ActivityTriggeredWaveRecorder extends Module implements IComplexSam
     {
         closeActiveRecording();
         mRecordingState = RecordingState.IDLE;
-        mSmoothedPowerDb = -100.0f;
+        mActivityDetector.reset();
 
         if(mCircularBuffer != null)
         {
@@ -162,17 +161,15 @@ public class ActivityTriggeredWaveRecorder extends Module implements IComplexSam
             return;
         }
 
-        float powerDb = calculatePowerDb(complexSamples);
-        mSmoothedPowerDb = (POWER_ALPHA * powerDb) + ((1.0f - POWER_ALPHA) * mSmoothedPowerDb);
+        boolean active = mActivityDetector.receive(complexSamples);
 
-        boolean active = mSmoothedPowerDb > mSquelchThresholdDb;
-
-        if(++mPowerLogCounter >= POWER_LOG_INTERVAL)
+        if(mActivityDetector.getBlockCount() - mLastPowerLogBlock >= POWER_LOG_INTERVAL_BLOCKS)
         {
-            mPowerLogCounter = 0;
-            mLog.info("Activity recorder [{}] power={} dB  threshold={} dB  state={}  active={}",
-                    mChannelName, String.format("%.1f", mSmoothedPowerDb),
-                    String.format("%.1f", mSquelchThresholdDb), mRecordingState, active);
+            mLastPowerLogBlock = mActivityDetector.getBlockCount();
+            mLog.info("Activity recorder [{}] in-channel power={} dB  floor={} dB  margin={} dB  state={}  active={}",
+                    mChannelName, String.format("%.1f", mActivityDetector.getPowerDb()),
+                    String.format("%.1f", mActivityDetector.getNoiseFloorDb()),
+                    String.format("%.1f", mActivityDetector.getTriggerMarginDb()), mRecordingState, active);
         }
 
         switch(mRecordingState)
@@ -194,7 +191,7 @@ public class ActivityTriggeredWaveRecorder extends Module implements IComplexSam
                 if(!active)
                 {
                     mLog.info("Activity recorder [{}] RECORDING->HOLDING at power={} dB",
-                            mChannelName, String.format("%.1f", mSmoothedPowerDb));
+                            mChannelName, String.format("%.1f", mActivityDetector.getPowerDb()));
                     mRecordingState = RecordingState.HOLDING;
                     mHoldSamplesRemaining = (long)(mSampleRate * HOLD_DURATION_MS / 1000.0);
                 }
@@ -207,7 +204,7 @@ public class ActivityTriggeredWaveRecorder extends Module implements IComplexSam
                 if(active)
                 {
                     mLog.info("Activity recorder [{}] HOLDING->RECORDING (re-trigger) at power={} dB",
-                            mChannelName, String.format("%.1f", mSmoothedPowerDb));
+                            mChannelName, String.format("%.1f", mActivityDetector.getPowerDb()));
                     mRecordingState = RecordingState.RECORDING;
                 }
                 else if(mHoldSamplesRemaining <= 0)
@@ -218,34 +215,6 @@ public class ActivityTriggeredWaveRecorder extends Module implements IComplexSam
                 }
                 break;
         }
-    }
-
-    /**
-     * Calculates the RMS power in dB for a ComplexSamples buffer.
-     */
-    private float calculatePowerDb(ComplexSamples samples)
-    {
-        float[] iSamples = samples.i();
-        float[] qSamples = samples.q();
-        int length = samples.length();
-
-        double sumSquares = 0.0;
-
-        for(int i = 0; i < length; i++)
-        {
-            float iVal = iSamples[i];
-            float qVal = qSamples[i];
-            sumSquares += (iVal * iVal) + (qVal * qVal);
-        }
-
-        double rms = Math.sqrt(sumSquares / length);
-
-        if(rms < 1e-20)
-        {
-            return -200.0f;
-        }
-
-        return (float)(20.0 * Math.log10(rms));
     }
 
     /**
@@ -368,6 +337,7 @@ public class ActivityTriggeredWaveRecorder extends Module implements IComplexSam
                 {
                     mSampleRate = newRate;
                     mAudioFormat = new AudioFormat(newRate, 16, 2, true, false);
+                    mActivityDetector.setSampleRate(newRate);
 
                     // If recording, close and restart with new format
                     if(mRecordingState != RecordingState.IDLE)
