@@ -1,6 +1,6 @@
 # Decode regression corpus
 
-24 baseband I/Q captures (96.6 MB, 50 kHz stereo PCM) used to prove that a code change did not
+35 baseband I/Q captures (139 MB, 50 kHz stereo PCM) used to prove that a code change did not
 degrade decode quality. `./gradlew runRegression` decodes the whole corpus and compares against the
 committed baseline, exiting non-zero if anything got worse.
 
@@ -92,10 +92,15 @@ defaults — but keeping them makes the intended live configuration explicit.
 | `p25-c4fm-e` | P25P1 C4FM | **0 (auto)** | 2 | NAC auto-detect, which exercises `NACTracker`. One dense short burst, one long sparse capture. |
 | `p25-c4fm-f` | P25P1 C4FM | 2311 | 1 | Mid-length with a 12% artifact rate. |
 | `p25-c4fm-g` | P25P1 C4FM | 2144 | 3 | **Unrecoverable voice.** `_01` is a unit received at ~4 dB in-band SNR: sync, NAC and link control decode, but every voice frame is near-random bits, and the call must produce **no audio** (it used to come out as clicks half a second apart). `_02` is clean calls at ~12 dB with a truncated phantom LDU2 at call start and a 138-bit LDU stub at call end, which must be dropped while the speech is kept. `_03` is the weak unit again at ~5 dB, whose LDUs mostly fall under the single-LDU error total and are only caught by the call-level clean-frame window (`LDUVoiceQuality`); it also must produce no audio. The gate can't see junk audio return on a zero baseline, so `UnrecoverableVoiceCorpusTest` checks the LDU classification of all three clips. |
+| `p25-c4fm-h` | P25P1 C4FM | 659 | 2 | Strong channel: `_01` 100% and `_02` 94% error-free voice frames. |
+| `p25-c4fm-i` | P25P1 C4FM | 659 | 2 | Strong channel: `_01` 99.5%, `_02` 93% error-free. |
+| `p25-c4fm-j` | P25P1 C4FM | 279 | 2 | Strong, busy channel: `_01` 100%, `_02` 92% error-free. |
+| `p25-c4fm-k` | P25P1 C4FM | auto | 2 | Mostly medium signal: `_01` 98%, `_02` 90% error-free. |
+| `p25-c4fm-l` | P25P1 C4FM | 279 | 3 | **Weak channel**: `_01` 97% (a strong unit), `_02` 86%, `_03` 52% error-free, the typical weak call (60 of the channel's first 96 captures were under 30%). The diversity decoder's target. |
 | `nbfm-mdc-a` | NBFM 12.5 | — | 2 | MDC-1200 bursts for the dual-branch diversity decoder. |
 | `nbfm-mdc-b` | NBFM 12.5 | — | 2 | More MDC-1200, including the richest file in the set (4 CRC-valid bursts). |
 
-The MDC evaluator runs over the **whole** corpus, not just the NBFM channels. The 20 P25 files all
+The MDC evaluator runs over the **whole** corpus, not just the NBFM channels. The 31 P25 files all
 baseline at zero CRC-valid bursts, so they double as a false-positive guard on the MDC detector.
 
 ## Provenance
@@ -111,6 +116,11 @@ each capture through the live processing chain (`runPipelineReplay -Pplaylist=..
 also writes per-frame IMBE error counts) and measuring each call's in-band SNR. `_01` is the first 25 s of a 39 s
 capture and keeps the whole call; `_02` and `_03` (added 2026-11-26, recorded by the in-channel activity trigger) are
 untrimmed.
+
+The `p25-c4fm-h` to `-l` clips were added on 2026-11-27 from the first four hours of activity-triggered captures on
+channels that had no samples yet. Each capture was scored with `ImpactProbe` using the channel's live decoder settings
+(the share of voice frames decoded with no Golay corrections), and a strong (>= 95%), medium (closest to 85%) and weak
+(closest to 50%) file was taken per channel where one existed, trimmed to its first 20 s.
 
 `corpus.json` records the per-file duration, size, decoder config, and the character each clip was
 chosen for.

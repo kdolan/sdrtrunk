@@ -47,6 +47,36 @@
     <decode_configuration type="decodeConfigP25Phase1" dfeMu="0.005" configuredNAC="2144" audioHoldoverMs="180" ignoreEncryptionState="true" pipelineDiagnostics="false" modulation="C4FM" afcAlpha="0.01" adaptiveThresholds="false" maxBchErrors="5" maxImbeErrors="0" cmaTrackingMu="0.001" cmaGearShiftMs="200" dfeEnabled="false" cmaAcquisitionMu="0.003" gardnerBandwidth="0.01" ignore_data_calls="false" traffic_channel_pool_size="20" />
     <record_configuration />
   </channel>
+  <channel name="p25-c4fm-h" enabled="true" order="1" system="Corpus" site="Regression">
+    <source_configuration type="sourceConfigTuner" frequency="100000011" source_type="TUNER" />
+    <aux_decode_configuration />
+    <decode_configuration type="decodeConfigP25Phase1" dfeMu="0.005" modulation="C4FM" audioHoldoverMs="180" ignoreEncryptionState="false" pipelineDiagnostics="false" configuredNAC="659" maxImbeErrors="0" weakSignalDiversity="false" gardnerBandwidth="0.01" dfeEnabled="false" cmaTrackingMu="0.001" cmaGearShiftMs="200" maxBchErrors="5" cmaAcquisitionMu="0.003" afcAlpha="0.01" adaptiveThresholds="false" traffic_channel_pool_size="20" ignore_data_calls="false" ignore_encrypted_calls="false" />
+    <record_configuration />
+  </channel>
+  <channel name="p25-c4fm-i" enabled="true" order="1" system="Corpus" site="Regression">
+    <source_configuration type="sourceConfigTuner" frequency="100000012" source_type="TUNER" />
+    <aux_decode_configuration />
+    <decode_configuration type="decodeConfigP25Phase1" dfeMu="0.005" modulation="C4FM" audioHoldoverMs="180" ignoreEncryptionState="false" pipelineDiagnostics="false" configuredNAC="659" maxImbeErrors="0" weakSignalDiversity="false" gardnerBandwidth="0.01" dfeEnabled="false" cmaTrackingMu="0.001" cmaGearShiftMs="200" maxBchErrors="5" cmaAcquisitionMu="0.003" afcAlpha="0.01" adaptiveThresholds="false" traffic_channel_pool_size="10" ignore_data_calls="false" ignore_encrypted_calls="false" />
+    <record_configuration />
+  </channel>
+  <channel name="p25-c4fm-j" enabled="true" order="1" system="Corpus" site="Regression">
+    <source_configuration type="sourceConfigTuner" frequency="100000013" source_type="TUNER" />
+    <aux_decode_configuration />
+    <decode_configuration type="decodeConfigP25Phase1" dfeMu="0.005" modulation="C4FM" audioHoldoverMs="180" ignoreEncryptionState="false" pipelineDiagnostics="false" configuredNAC="279" maxImbeErrors="0" weakSignalDiversity="false" gardnerBandwidth="0.01" dfeEnabled="false" cmaTrackingMu="0.001" cmaGearShiftMs="200" maxBchErrors="5" cmaAcquisitionMu="0.003" afcAlpha="0.01" adaptiveThresholds="false" traffic_channel_pool_size="20" ignore_data_calls="false" ignore_encrypted_calls="false" />
+    <record_configuration />
+  </channel>
+  <channel name="p25-c4fm-k" enabled="true" order="1" system="Corpus" site="Regression">
+    <source_configuration type="sourceConfigTuner" frequency="100000014" source_type="TUNER" />
+    <aux_decode_configuration />
+    <decode_configuration type="decodeConfigP25Phase1" dfeMu="0.005" modulation="C4FM" audioHoldoverMs="180" ignoreEncryptionState="false" pipelineDiagnostics="false" configuredNAC="0" maxImbeErrors="0" weakSignalDiversity="false" gardnerBandwidth="0.01" dfeEnabled="false" cmaTrackingMu="0.001" cmaGearShiftMs="200" maxBchErrors="5" cmaAcquisitionMu="0.003" afcAlpha="0.01" adaptiveThresholds="false" traffic_channel_pool_size="20" ignore_data_calls="false" ignore_encrypted_calls="false" />
+    <record_configuration />
+  </channel>
+  <channel name="p25-c4fm-l" enabled="true" order="1" system="Corpus" site="Regression">
+    <source_configuration type="sourceConfigTuner" frequency="100000015" source_type="TUNER" />
+    <aux_decode_configuration />
+    <decode_configuration type="decodeConfigP25Phase1" dfeMu="0.005" modulation="C4FM" audioHoldoverMs="180" ignoreEncryptionState="false" pipelineDiagnostics="false" configuredNAC="279" maxImbeErrors="0" weakSignalDiversity="false" gardnerBandwidth="0.01" dfeEnabled="false" cmaTrackingMu="0.001" cmaGearShiftMs="200" maxBchErrors="5" cmaAcquisitionMu="0.003" afcAlpha="0.01" adaptiveThresholds="false" traffic_channel_pool_size="20" ignore_data_calls="false" ignore_encrypted_calls="false" />
+    <record_configuration />
+  </channel>
   <channel name="nbfm-mdc-a" enabled="true" order="1" system="Corpus" site="Regression">
     <source_configuration type="sourceConfigTuner" frequency="100000008" source_type="TUNER" />
     <aux_decode_configuration />

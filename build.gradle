@@ -1077,3 +1077,19 @@ tasks.register('runDiversityProbe', JavaExec) {
     jvmArgs = os.isWindows() ? jvmArgsWindows : jvmArgsLinux
     args = [project.findProperty('reference'), project.findProperty('degraded'), project.findProperty('nac') ?: '0']
 }
+/**
+ * Known-truth noise control: degrades a clean capture to a sweep of in-band SNRs (several noise seeds each) and scores
+ * the standard and weak-signal diversity C4FM decoders against the clean decode.
+ * Usage: ./gradlew runNoiseControl -Pclean=testdata/baseband/p25-c4fm-f/p25-c4fm-f_01_100000007_baseband.wav -Pnac=2311
+ *        [-Pseeds=3] [-Psnr=15,12,10,8,7,6,5,4,3]
+ */
+tasks.register('runNoiseControl', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.dsheirer.module.decode.p25.phase1.NoiseControl'
+    jvmArgs = os.isWindows() ? jvmArgsWindows : jvmArgsLinux
+    args = [project.findProperty('clean'), project.findProperty('nac') ?: '0',
+            layout.buildDirectory.dir('noise-control').get().asFile.path, project.findProperty('seeds') ?: '3'] +
+            (project.findProperty('snr') ?: '15,12,10,8,7,6,5,4,3').toString().split(',').toList()
+}
+
