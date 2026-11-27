@@ -39,6 +39,7 @@ import io.github.dsheirer.map.MapService;
 import io.github.dsheirer.module.log.EventLogManager;
 import io.github.dsheirer.monitor.DiagnosticMonitor;
 import io.github.dsheirer.monitor.ResourceMonitor;
+import io.github.dsheirer.monitor.StorageRetention;
 import io.github.dsheirer.playlist.PlaylistManager;
 import io.github.dsheirer.settings.Settings;
 import io.github.dsheirer.properties.SystemProperties;
@@ -81,6 +82,7 @@ public class SDRTrunk implements Listener<TunerEvent>
     private TunerManager mTunerManager;
     private ApplicationLog mApplicationLog;
     private ResourceMonitor mResourceMonitor;
+    private StorageRetention mStorageRetention;
 
     public SDRTrunk()
     {
@@ -108,6 +110,9 @@ public class SDRTrunk implements Listener<TunerEvent>
 
         mApplicationLog = new ApplicationLog(mSettings);
         mApplicationLog.start();
+
+        mStorageRetention = new StorageRetention(mSettings);
+        mStorageRetention.start();
 
         Map<String,List<String>> duplicateLibraries = DuplicateLibraryDetector.findDuplicates();
 
@@ -314,6 +319,7 @@ public class SDRTrunk implements Listener<TunerEvent>
         mPlaylistManager.getChannelProcessingManager().shutdown();
         mAudioRecordingManager.stop();
         mResourceMonitor.stop();
+        mStorageRetention.stop();
 
         mLog.info("Stopping tuners ...");
         mTunerManager.stop();

@@ -63,6 +63,7 @@ public enum Setting
     DIRECTORY_MAX_USAGE_EVENT_LOGS(Node.DIRECTORY, "directory.max.usage.event.logs"),
     DIRECTORY_MAX_USAGE_RECORDINGS(Node.DIRECTORY, "directory.max.usage.recordings"),
     DIRECTORY_PLAYLIST(Node.DIRECTORY, "directory.playlist"),
+    DIRECTORY_RETENTION_DAYS(Node.DIRECTORY, "directory.retention.days"),
     DIRECTORY_RECORDING(Node.DIRECTORY, "directory.recording"),
     DIRECTORY_SCREEN_CAPTURE(Node.DIRECTORY, "directory.screen.capture"),
     DIRECTORY_STREAMING(Node.DIRECTORY, "directory.streaming"),

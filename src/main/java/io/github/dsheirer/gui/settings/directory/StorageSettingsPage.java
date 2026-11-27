@@ -41,7 +41,8 @@ import javafx.scene.control.Spinner;
 import javafx.stage.DirectoryChooser;
 
 /**
- * Settings for the folders where sdrtrunk stores its files, and the disk usage limits for event logs and recordings
+ * Settings for the folders where sdrtrunk stores its files, the disk usage limits for event logs and recordings,
+ * and how long recordings and logs are kept
  */
 public class StorageSettingsPage extends SettingsPage
 {
@@ -49,6 +50,7 @@ public class StorageSettingsPage extends SettingsPage
     private final List<Runnable> mPathRefreshers = new ArrayList<>();
     private Spinner<Integer> mRecordingSpinner;
     private Spinner<Integer> mEventLogSpinner;
+    private Spinner<Integer> mRetentionSpinner;
 
     public StorageSettingsPage(Settings settings)
     {
@@ -99,6 +101,30 @@ public class StorageSettingsPage extends SettingsPage
         usage.addRow("Recordings (MB)", getRecordingSpinner())
             .defaultValue(getRecordingSpinner().valueProperty(), DirectorySettings.DEFAULT_USAGE_THRESHOLD_RECORDINGS_MB,
                 value -> getRecordingSpinner().getValueFactory().setValue(value));
+
+        SettingsSection retention = addSection("Automatic Cleanup");
+        retention.addHelp("Recordings, event logs and application logs older than this are deleted automatically " +
+            "(checked hourly).  Set to 0 to keep them forever.");
+        retention.addRow("Keep files for (days)", getRetentionSpinner())
+            .defaultValue(getRetentionSpinner().valueProperty(), DirectorySettings.DEFAULT_RETENTION_DAYS,
+                value -> getRetentionSpinner().getValueFactory().setValue(value));
+    }
+
+    /**
+     * Retention period spinner
+     * @return spinner
+     */
+    private Spinner<Integer> getRetentionSpinner()
+    {
+        if(mRetentionSpinner == null)
+        {
+            mRetentionSpinner = new Spinner<>(0, 3650, mDirectorySettings.getDirectoryRetentionDays(), 1);
+            mRetentionSpinner.setEditable(true);
+            mRetentionSpinner.valueProperty().addListener((observable, oldValue, newValue) -> mDirectorySettings
+                    .setDirectoryRetentionDays(newValue));
+        }
+
+        return mRetentionSpinner;
     }
 
     public void dispose()

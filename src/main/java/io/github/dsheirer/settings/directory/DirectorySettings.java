@@ -38,6 +38,7 @@ public class DirectorySettings extends AbstractSettings
 
     public static final int DEFAULT_USAGE_THRESHOLD_RECORDINGS_MB = 2000;
     public static final int DEFAULT_USAGE_THRESHOLD_EVENT_LOGS_MB = 200;
+    public static final int DEFAULT_RETENTION_DAYS = 7;
 
     private static final String DIRECTORY_APPLICATION_ROOT = "SDRTrunk";
     private static final String DIRECTORY_APPLICATION_LOG = "logs";
@@ -61,6 +62,7 @@ public class DirectorySettings extends AbstractSettings
     private Path mDirectoryStreaming;
     private Integer mDirectoryMaxUsageRecordings;
     private Integer mDirectoryMaxUsageEventLogs;
+    private Integer mDirectoryRetentionDays;
 
     /**
      * Constructs this setting with an update listener
@@ -144,6 +146,31 @@ public class DirectorySettings extends AbstractSettings
     {
         Setting.DIRECTORY_MAX_USAGE_RECORDINGS.putInt(thresholdMB);
         mDirectoryMaxUsageRecordings = thresholdMB;
+        notifySettingsUpdated();
+    }
+
+    /**
+     * Number of days that recordings, event logs and application logs are kept before they are deleted.
+     * @return days, or 0 to keep them forever
+     */
+    public int getDirectoryRetentionDays()
+    {
+        if(mDirectoryRetentionDays == null)
+        {
+            mDirectoryRetentionDays = Math.max(0, Setting.DIRECTORY_RETENTION_DAYS.getInt(DEFAULT_RETENTION_DAYS));
+        }
+
+        return mDirectoryRetentionDays;
+    }
+
+    /**
+     * Sets the number of days that recordings, event logs and application logs are kept.
+     * @param days to keep files, or 0 to keep them forever
+     */
+    public void setDirectoryRetentionDays(int days)
+    {
+        Setting.DIRECTORY_RETENTION_DAYS.putInt(Math.max(0, days));
+        mDirectoryRetentionDays = Math.max(0, days);
         notifySettingsUpdated();
     }
 
