@@ -27,7 +27,9 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Voice frame voting in the weak-signal diversity decoder.
+ * Voice frame selection in the weak-signal diversity decoder.  Score of a group of identical candidates = distinct
+ * tracks supporting it - 0.1 x fewest corrections; a group other than the primary's must have needed fewer corrections
+ * than the primary and must score strictly higher.
  */
 public class P25P1DecoderC4FMDiversityTest
 {
@@ -36,12 +38,14 @@ public class P25P1DecoderC4FMDiversityTest
         return BitSet.valueOf(new long[]{value});
     }
 
-    private static int sTrack = 0;
-
-    private static P25P1DecoderC4FMDiversity.Candidate candidate(int content, int errors, boolean primary)
+    private static P25P1DecoderC4FMDiversity.Candidate primary(int content, int errors)
     {
-        //Each call is a different track unless it is the primary (track 0)
-        return candidate(content, errors, primary, primary ? 0 : ++sTrack);
+        return candidate(content, errors, true, 0);
+    }
+
+    private static P25P1DecoderC4FMDiversity.Candidate candidate(int content, int errors, int track)
+    {
+        return candidate(content, errors, false, track);
     }
 
     private static P25P1DecoderC4FMDiversity.Candidate candidate(int content, int errors, boolean primary, int track)
@@ -51,56 +55,52 @@ public class P25P1DecoderC4FMDiversityTest
     }
 
     @Test
-    public void agreeingTracksReplaceThePrimary()
+    public void betterSupportedGroupWithFewerCorrectionsReplaces()
     {
-        byte[] winner = P25P1DecoderC4FMDiversity.vote(List.of(candidate(1, 6, true), candidate(2, 2, false),
-            candidate(2, 1, false), candidate(3, 5, false)));
-        assertArrayEquals(new byte[]{2, 1}, winner, "the agreeing group wins, its fewest-error member is used");
+        //Primary: 1 track, 6 corrections (0.4).  Content 2: 2 tracks, best 1 correction (1.9)
+        byte[] winner = P25P1DecoderC4FMDiversity.vote(List.of(primary(1, 6), candidate(2, 2, 1),
+            candidate(2, 1, 2), candidate(3, 5, 3)));
+        assertArrayEquals(new byte[]{2, 1}, winner, "the winning group's fewest-correction member is used");
     }
 
     @Test
-    public void primaryKeepsATie()
+    public void replacementMustNeedFewerCorrectionsThanThePrimary()
     {
-        assertNull(P25P1DecoderC4FMDiversity.vote(List.of(candidate(1, 6, true), candidate(1, 6, false),
-            candidate(2, 1, false), candidate(2, 1, false))));
+        //Content 2 has three tracks behind it, but none needed fewer corrections than the primary's 2
+        assertNull(P25P1DecoderC4FMDiversity.vote(List.of(primary(1, 2), candidate(2, 2, 1), candidate(2, 3, 2),
+            candidate(2, 2, 3))));
     }
 
     @Test
-    public void primaryInTheLargestGroupIsKept()
+    public void primaryBackedByMoreTracksIsKept()
     {
-        assertNull(P25P1DecoderC4FMDiversity.vote(List.of(candidate(1, 4, true), candidate(1, 3, false),
-            candidate(1, 3, false), candidate(2, 0, false))));
+        //Primary content: 3 tracks, 3 corrections (2.7).  Content 2: 1 track, 0 corrections (1.0)
+        assertNull(P25P1DecoderC4FMDiversity.vote(List.of(primary(1, 4), candidate(1, 3, 1), candidate(1, 3, 2),
+            candidate(2, 0, 3))));
     }
 
     @Test
-    public void singleDissentingCandidateDoesNotReplace()
+    public void oneTracksHardAndSoftDecodesCountOnce()
     {
-        assertNull(P25P1DecoderC4FMDiversity.vote(List.of(candidate(1, 6, true), candidate(2, 0, false))),
-            "a lone candidate isn't agreement");
+        //Primary content: 2 tracks, 4 corrections (1.6).  Content 2 from track 5's hard and soft decodes, 3 corrections:
+        //one track (0.7), not two (1.7), so the primary is kept
+        assertNull(P25P1DecoderC4FMDiversity.vote(List.of(primary(1, 4), candidate(1, 5, 1), candidate(2, 3, 5),
+            candidate(2, 4, 5))));
     }
 
     @Test
-    public void oneTracksHardAndSoftDecodesAreOneVote()
+    public void equalScoreKeepsThePrimary()
     {
-        //Track 5's hard and soft decodes agree with each other but no other track does: not agreement
-        assertNull(P25P1DecoderC4FMDiversity.vote(List.of(candidate(1, 10, true), candidate(2, 3, false, 5),
-            candidate(2, 4, false, 5))));
+        //Primary: 2 tracks, 5 corrections (1.5).  Content 2: 2 tracks, best 5 corrections: not fewer, kept
+        assertNull(P25P1DecoderC4FMDiversity.vote(List.of(primary(1, 5), candidate(1, 6, 1), candidate(2, 5, 2),
+            candidate(2, 6, 3))));
     }
 
     @Test
-    public void tracksMustOutnumberThePrimarysSupporters()
+    public void lowerCorrectionSingleTrackCanReplaceAWeakPrimary()
     {
-        //Two tracks back the primary's content, two others back content 2: a tie, the primary stays
-        assertNull(P25P1DecoderC4FMDiversity.vote(List.of(candidate(1, 10, true), candidate(1, 9, false, 1),
-            candidate(2, 3, false, 2), candidate(2, 3, false, 3))));
-        assertArrayEquals(new byte[]{2, 3}, P25P1DecoderC4FMDiversity.vote(List.of(candidate(1, 10, true),
-            candidate(2, 3, false, 2), candidate(2, 3, false, 3))));
-    }
-
-    @Test
-    public void tieBetweenTwoOtherGroupsKeepsThePrimary()
-    {
-        assertNull(P25P1DecoderC4FMDiversity.vote(List.of(candidate(1, 6, true), candidate(2, 1, false),
-            candidate(2, 1, false), candidate(3, 1, false), candidate(3, 1, false))));
+        //Primary: 1 track, 10 corrections (0.0).  Content 2: 1 track, 2 corrections (0.8)
+        assertArrayEquals(new byte[]{2, 2}, P25P1DecoderC4FMDiversity.vote(List.of(primary(1, 10),
+            candidate(2, 2, 4))));
     }
 }

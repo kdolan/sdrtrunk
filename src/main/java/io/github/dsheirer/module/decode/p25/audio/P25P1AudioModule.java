@@ -92,6 +92,7 @@ public class P25P1AudioModule extends ImbeAudioModule
     private final LDUVoiceQuality mVoiceQuality = new LDUVoiceQuality();
     private boolean mCodecResetPending = false;
     private int mPendingSilenceFrames = 0;
+    private static final int MAX_HELD_SILENCE_FRAMES = 25; //0.5 seconds
 
     private SquelchStateListener mSquelchStateListener = new SquelchStateListener();
     // ponytail: fixed +6 dB; upstream #2489 dropped the old 5x hard-clipped gain entirely. Level processing beyond
@@ -454,10 +455,13 @@ public class P25P1AudioModule extends ImbeAudioModule
      * Adds a frame of the call's audio, first writing out any silence held for LDUs that carried no voice.  Silence is
      * held rather than written so that it only keeps the timing between pieces of voice: silence after the last voice
      * of a call is never written, which would otherwise leave a call whose voice was a short fragment as a segment of
-     * mostly silence.
+     * mostly silence.  The silence between two pieces of voice is capped at MAX_HELD_SILENCE_FRAMES, so that two
+     * fragments recovered seconds apart from a weak transmission don't become seconds of dead air.
      */
     private void addVoice(float[] audio)
     {
+        mPendingSilenceFrames = Math.min(mPendingSilenceFrames, MAX_HELD_SILENCE_FRAMES);
+
         while(mPendingSilenceFrames > 0)
         {
             addAudio(new float[FRAME_SAMPLE_COUNT]);

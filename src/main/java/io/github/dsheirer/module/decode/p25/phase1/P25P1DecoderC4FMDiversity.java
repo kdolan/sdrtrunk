@@ -44,11 +44,9 @@ import jmbe.frame.CorrectedIMBEFrame;
  *
  * Each primary LDU is held briefly so the secondary tracks' decodes of the same LDU can arrive.  For each voice frame
  * the primary decoded with errors in its Golay-protected codewords, the candidates (each track's hard decision frame
- * and its soft decision frame, see SoftIMBEFrameDecoder) vote on the frame's Golay-protected content.  A group's
- * support is the number of distinct tracks behind it.  The best-supported group wins, ties go to the primary, and the
- * frame is only replaced when at least two tracks agree on the winner, they outnumber the tracks agreeing with the
- * primary, and the winner needed fewer corrections than the primary.  Error-free primary frames are never touched, so
- * strong signals are unaffected.
+ * and its soft decision frame, see SoftIMBEFrameDecoder) are grouped by the frame's Golay-protected content and the
+ * best-scoring group replaces the primary's frame (see vote()): it must have needed fewer corrections than the
+ * primary, and ties keep the primary.  Error-free primary frames are never touched, so strong signals are unaffected.
  */
 public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
 {
@@ -56,28 +54,46 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
     private static final double MATCH_SECONDS = 0.10;
     private static final int GOLAY_PROTECTED_BITS = 92;
     private static final int CHASE_BITS = 5;
-    private static final int MIN_AGREEMENT = Integer.getInteger("p25.diversity.min.agreement", 2);
-    //How many more candidates the winning group needs than the primary's own group
-    private static final int MIN_LEAD = Integer.getInteger("p25.diversity.min.lead", 1);
-    //The winner must also have needed fewer corrections than the primary.  On the known-truth testbed this removed 12
-    //of 17 frames replaced wrongly (where the primary was right despite many corrections) for 3% of the frames gained.
-    private static final boolean REQUIRE_FEWER_ERRORS =
-        !"false".equals(System.getProperty("p25.diversity.fewer.errors"));
     private static final int[] FRAME_OFFSETS = {LDUMessage.IMBE_FRAME_1, LDUMessage.IMBE_FRAME_2,
         LDUMessage.IMBE_FRAME_3, LDUMessage.IMBE_FRAME_4, LDUMessage.IMBE_FRAME_5, LDUMessage.IMBE_FRAME_6,
         LDUMessage.IMBE_FRAME_7, LDUMessage.IMBE_FRAME_8, LDUMessage.IMBE_FRAME_9};
 
     /**
-     * Secondary track definition: channel filter pass and stop band edges and a frequency shift.
+     * Secondary track definition: the demodulator (the standard C4FM decoder with a channel filter of the given pass
+     * and stop band edges, or the C4FM_V2 decoder with its own filters) and a frequency shift.
      */
-    public record TrackConfig(double passBand, double stopBand, double shiftHz) {}
+    public record TrackConfig(boolean v2, double passBand, double stopBand, double shiftHz)
+    {
+        static TrackConfig c4fm(double passBand, double stopBand, double shiftHz)
+        {
+            return new TrackConfig(false, passBand, stopBand, shiftHz);
+        }
 
+        static TrackConfig v2(double shiftHz)
+        {
+            return new TrackConfig(true, 0, 0, shiftHz);
+        }
+    }
+
+    /**
+     * Twelve secondary tracks.  Tracks that differ only in channel filter make correlated mistakes; adding narrower
+     * filters, wider frequency offsets and a different demodulator (C4FM_V2) made the candidates more independent.  On
+     * the testbed at 4 dB this took the frames where some track was right from 77-83% to 89-93%, and the frames
+     * decoded correctly from 55-57% to 72-77%.
+     */
     public static final List<TrackConfig> DEFAULT_TRACKS = List.of(
-        new TrackConfig(3500, 4500, 0),
-        new TrackConfig(4000, 5000, 0),
-        new TrackConfig(4500, 5500, 0),
-        new TrackConfig(3500, 4500, 150),
-        new TrackConfig(3500, 4500, -150));
+        TrackConfig.c4fm(3500, 4500, 0),
+        TrackConfig.c4fm(4000, 5000, 0),
+        TrackConfig.c4fm(4500, 5500, 0),
+        TrackConfig.c4fm(3500, 4500, 150),
+        TrackConfig.c4fm(3500, 4500, -150),
+        TrackConfig.c4fm(3000, 4000, 0),
+        TrackConfig.c4fm(3200, 4200, 0),
+        TrackConfig.c4fm(3500, 4500, 300),
+        TrackConfig.c4fm(3500, 4500, -300),
+        TrackConfig.v2(0),
+        TrackConfig.v2(150),
+        TrackConfig.v2(-150));
 
     private record Decoded(long position, LDUMessage ldu) {}
     private record Held(long releaseAt, long position, IMessage message) {}
@@ -87,14 +103,35 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
      */
     private class Track
     {
-        private final P25P1DecoderC4FM mDecoder;
+        private final io.github.dsheirer.module.decode.FeedbackDecoder mDecoder;
+        private final P25P1MessageFramer mFramer;
+        private final java.util.function.Consumer<ComplexSamples> mReceive;
+        private final java.util.function.DoubleConsumer mSetSampleRate;
+        private final java.util.function.IntConsumer mSetNac;
         private final double mShiftHz;
         private double mPhase = 0;
         private final List<Decoded> mDecoded = new ArrayList<>();
 
         Track(TrackConfig config)
         {
-            mDecoder = new P25P1DecoderC4FM(config.passBand(), config.stopBand());
+            if(config.v2())
+            {
+                P25P1DecoderC4FMv2 decoder = new P25P1DecoderC4FMv2();
+                mDecoder = decoder;
+                mFramer = decoder.getMessageFramer();
+                mReceive = decoder::receive;
+                mSetSampleRate = decoder::setSampleRate;
+                mSetNac = decoder::setConfiguredNAC;
+            }
+            else
+            {
+                P25P1DecoderC4FM decoder = new P25P1DecoderC4FM(config.passBand(), config.stopBand());
+                mDecoder = decoder;
+                mFramer = decoder.getMessageFramer();
+                mReceive = decoder::receive;
+                mSetSampleRate = decoder::setSampleRate;
+                mSetNac = decoder::setConfiguredNAC;
+            }
             mShiftHz = config.shiftHz();
             mDecoder.setMessageListener(message -> {
                 if(message instanceof LDUMessage ldu && !ldu.isDuidCorrected() && !ldu.isTruncated())
@@ -108,7 +145,7 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
         {
             if(mShiftHz == 0)
             {
-                mDecoder.receive(samples);
+                mReceive.accept(samples);
                 return;
             }
 
@@ -129,7 +166,7 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
             }
 
             mPhase %= 2 * Math.PI;
-            mDecoder.receive(new ComplexSamples(si, sq, samples.timestamp()));
+            mReceive.accept(new ComplexSamples(si, sq, samples.timestamp()));
         }
 
         LDUMessage match(LDUMessage primary, long position)
@@ -201,7 +238,7 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
 
         for(Track track: mTracks)
         {
-            track.mDecoder.setSampleRate(sampleRate);
+            track.mSetSampleRate.accept(sampleRate);
         }
     }
 
@@ -212,7 +249,7 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
 
         for(Track track: mTracks)
         {
-            track.mDecoder.setConfiguredNAC(nac);
+            track.mSetNac.accept(nac);
         }
     }
 
@@ -225,7 +262,7 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
 
         for(Track track: mTracks)
         {
-            track.mDecoder.getMessageFramer().setMaxBchErrors(maxBchErrors);
+            track.mFramer.setMaxBchErrors(maxBchErrors);
         }
     }
 
@@ -363,7 +400,7 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
     {
         byte[] raw = ldu.getIMBEFrames().get(frame);
         CorrectedIMBEFrame hard = ldu.getCorrectedIMBEFrames().get(frame);
-        candidates.add(new Candidate(raw, golayContent(hard.getFrame()), hard.getErrorCountTotal(), primary, track));
+        candidates.add(new Candidate(raw, golayContent(hard.getFrame()), golayErrors(hard), primary, track));
 
         if(ldu.getSoftSymbols() != null)
         {
@@ -372,14 +409,18 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
             CorrectedIMBEFrame softFrame = CorrectedIMBEFrame.correct(soft.frame());
             //The soft frame re-corrects to zero errors by construction, so rank it behind the hard frames it came from
             candidates.add(new Candidate(soft.frame(), golayContent(softFrame.getFrame()),
-                hard.getErrorCountTotal() + 1, false, track));
+                golayErrors(hard) + 1, false, track));
         }
     }
 
     /**
-     * Votes on the candidates' Golay-protected content.  Returns the raw frame to use in place of the primary's, or
-     * null to keep the primary's: when the primary hard frame is in (or tied for) the largest group, or the largest
-     * group has fewer than MIN_AGREEMENT members.
+     * Chooses among the candidates by their Golay-protected content.  Each group of identical candidates scores its
+     * support (the number of distinct tracks in it, so a track's agreeing hard and soft decodes count once) minus a
+     * tenth of the fewest corrections any member needed.  A group other than the primary's can only win if it needed
+     * fewer corrections than the primary, and only by scoring strictly higher, so ties keep the primary.  On the
+     * testbed this decoded 1-4 points more frames correctly than requiring two agreeing tracks, without losing more
+     * frames the primary had right.
+     * @return the raw frame to use in place of the primary's, or null to keep the primary's.
      */
     public static byte[] vote(List<Candidate> candidates)
     {
@@ -404,59 +445,63 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
             group.add(candidate);
         }
 
-        //A group's support is the number of distinct tracks in it: a track's hard and soft decodes agreeing with each
-        //other are one track, not two votes
-        java.util.function.ToIntFunction<List<Candidate>> support =
-            g -> (int)g.stream().mapToInt(Candidate::track).distinct().count();
-        int largest = groups.stream().mapToInt(support).max().orElse(0);
-        int primaryGroup = groups.stream().filter(g -> g.stream().anyMatch(Candidate::primaryHard))
-            .mapToInt(support).findFirst().orElse(0);
-        List<Candidate> winner = null;
-
+        List<Candidate> primaryGroup = null;
+        int primaryErrors = Integer.MAX_VALUE;
         for(List<Candidate> group: groups)
         {
-            if(support.applyAsInt(group) == largest)
+            for(Candidate candidate: group)
             {
-                if(group.stream().anyMatch(Candidate::primaryHard))
+                if(candidate.primaryHard())
                 {
-                    return null; //the primary is (tied for) the most supported content
-                }
-                if(winner == null)
-                {
-                    winner = group;
-                }
-                else
-                {
-                    return null; //tie between two other groups: no clear winner
+                    primaryGroup = group;
+                    primaryErrors = candidate.errors();
                 }
             }
         }
 
-        if(winner == null || largest < MIN_AGREEMENT || largest < primaryGroup + MIN_LEAD)
+        List<Candidate> best = primaryGroup;
+        double bestScore = primaryGroup != null ? score(primaryGroup) : -Double.MAX_VALUE;
+
+        for(List<Candidate> group: groups)
+        {
+            if(group == primaryGroup || minErrors(group) >= primaryErrors)
+            {
+                continue;
+            }
+
+            double score = score(group);
+            if(score > bestScore)
+            {
+                bestScore = score;
+                best = group;
+            }
+        }
+
+        if(best == null || best == primaryGroup)
         {
             return null;
         }
 
-        Candidate best = winner.get(0);
-        for(Candidate candidate: winner)
+        Candidate fewest = best.get(0);
+        for(Candidate candidate: best)
         {
-            if(candidate.errors() < best.errors())
+            if(candidate.errors() < fewest.errors())
             {
-                best = candidate;
+                fewest = candidate;
             }
         }
 
-        if(REQUIRE_FEWER_ERRORS)
-        {
-            int primaryErrors = candidates.stream().filter(Candidate::primaryHard).mapToInt(Candidate::errors)
-                .findFirst().orElse(Integer.MAX_VALUE);
-            if(best.errors() >= primaryErrors)
-            {
-                return null;
-            }
-        }
+        return fewest.raw();
+    }
 
-        return best.raw();
+    private static int minErrors(List<Candidate> group)
+    {
+        return group.stream().mapToInt(Candidate::errors).min().orElse(Integer.MAX_VALUE);
+    }
+
+    private static double score(List<Candidate> group)
+    {
+        return group.stream().mapToInt(Candidate::track).distinct().count() - 0.1 * minErrors(group);
     }
 
     private static BitSet golayContent(BinaryFrame frame)
