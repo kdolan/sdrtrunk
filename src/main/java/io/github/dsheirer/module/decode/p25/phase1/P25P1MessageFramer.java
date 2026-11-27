@@ -598,6 +598,7 @@ public class P25P1MessageFramer extends C4FMMessageFramer
                 else
                 {
                     ldu.setSoftSymbols(mMessageAssembler.getSoftSymbols(0, cbm.size()));
+                    ldu.setReliabilities(mMessageAssembler.getReliabilities(0, cbm.size()));
                 }
             }
 

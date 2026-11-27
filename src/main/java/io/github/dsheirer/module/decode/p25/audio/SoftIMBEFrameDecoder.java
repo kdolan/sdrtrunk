@@ -90,6 +90,26 @@ public class SoftIMBEFrameDecoder
      */
     public static float[] getBitConfidence(float[] softSymbols, int frameOffset)
     {
+        return getBitConfidence(softSymbols, null, frameOffset);
+    }
+
+    /**
+     * Evaluation switch: -Dp25.voice.reliability=false ignores the signal envelope reliabilities.
+     */
+    private static final boolean USE_RELIABILITY = !"false".equals(System.getProperty("p25.voice.reliability"));
+
+    /**
+     * Bit confidence for each of the frame's 144 message bits, from the soft symbols of the LDU message, weighted by
+     * each dibit's reliability.  The discriminator's soft symbol carries no sign of a fade (FM output doesn't shrink
+     * with the signal, it turns to noise), so without the envelope-based reliability the Chase search can't tell the
+     * bits received in a fade from good ones.
+     * @param softSymbols per dibit of the LDU message (radians)
+     * @param reliabilities per dibit of the LDU message, or null for unweighted confidence
+     * @param frameOffset message bit offset of the IMBE frame
+     */
+    public static float[] getBitConfidence(float[] softSymbols, float[] reliabilities, int frameOffset)
+    {
+        boolean weighted = USE_RELIABILITY && reliabilities != null && reliabilities.length == softSymbols.length;
         float[] confidence = new float[FRAME_BITS];
 
         for(int x = 0; x < FRAME_BITS; x++)
@@ -98,6 +118,11 @@ public class SoftIMBEFrameDecoder
             float soft = softSymbols[bit / 2];
             //First bit of the dibit is the sign, the second is inner/outer level (boundary at +/- pi/2)
             confidence[x] = (bit % 2 == 0) ? Math.abs(soft) : Math.abs(Math.abs(soft) - HALF_PI);
+
+            if(weighted)
+            {
+                confidence[x] *= reliabilities[bit / 2];
+            }
         }
 
         return confidence;

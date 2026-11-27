@@ -241,6 +241,54 @@ public class NoiseInjector
     }
 
     /**
+     * Copy of the capture multiplied by a flat-fading channel gain: Rician with K factor (K = 0 is Rayleigh), maximum
+     * Doppler frequency dopplerHz, unit mean power, so the average SNR is unchanged.  The scattered part is a Jakes
+     * sum of sinusoids with random arrival angles and phases; the line-of-sight part has a fixed phase.
+     *
+     * At 155 MHz the maximum Doppler is about 1 Hz for a walking user and 7-15 Hz for a vehicle at 30-60 mph.
+     */
+    public static Capture fade(Capture capture, double dopplerHz, double kFactor, long seed)
+    {
+        int paths = 32;
+        Random random = new Random(seed ^ 0x5DEECE66DL);
+        double[] frequency = new double[paths];
+        double[] phaseI = new double[paths];
+        double[] phaseQ = new double[paths];
+
+        for(int p = 0; p < paths; p++)
+        {
+            double angle = 2 * Math.PI * (p + random.nextDouble()) / paths;
+            frequency[p] = 2 * Math.PI * dopplerHz * Math.cos(angle) / capture.sampleRate();
+            phaseI[p] = 2 * Math.PI * random.nextDouble();
+            phaseQ[p] = 2 * Math.PI * random.nextDouble();
+        }
+
+        double scatter = Math.sqrt(1 / (kFactor + 1));
+        double los = Math.sqrt(kFactor / (kFactor + 1));
+        double norm = Math.sqrt(1.0 / paths);
+        double[] i = new double[capture.length()];
+        double[] q = new double[capture.length()];
+
+        for(int x = 0; x < capture.length(); x++)
+        {
+            double gi = 0, gq = 0;
+
+            for(int p = 0; p < paths; p++)
+            {
+                gi += Math.cos(frequency[p] * x + phaseI[p]);
+                gq += Math.sin(frequency[p] * x + phaseQ[p]);
+            }
+
+            gi = los + scatter * norm * gi;
+            gq = scatter * norm * gq;
+            i[x] = capture.i()[x] * gi - capture.q()[x] * gq;
+            q[x] = capture.i()[x] * gq + capture.q()[x] * gi;
+        }
+
+        return new Capture(i, q, capture.sampleRate());
+    }
+
+    /**
      * Copy of the capture with white Gaussian noise added to bring the in-band SNR down to the target.  The result is
      * scaled down if needed so it doesn't clip.
      */

@@ -1081,13 +1081,18 @@ tasks.register('runDiversityProbe', JavaExec) {
  * Known-truth noise control: degrades a clean capture to a sweep of in-band SNRs (several noise seeds each) and scores
  * the standard and weak-signal diversity C4FM decoders against the clean decode.
  * Usage: ./gradlew runNoiseControl -Pclean=testdata/baseband/p25-c4fm-f/p25-c4fm-f_01_100000007_baseband.wav -Pnac=2311
- *        [-Pseeds=3] [-Psnr=15,12,10,8,7,6,5,4,3]
+ *        [-Pseeds=3] [-Psnr=15,12,10,8,7,6,5,4,3] [-Pdoppler=Hz [-Pk=K]]
  */
 tasks.register('runNoiseControl', JavaExec) {
     dependsOn testClasses
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'io.github.dsheirer.module.decode.p25.phase1.NoiseControl'
     jvmArgs = os.isWindows() ? jvmArgsWindows : jvmArgsLinux
+    //-Pdoppler=Hz [-Pk=Rician K] adds flat fading ahead of the noise (K 0 = Rayleigh)
+    if(project.hasProperty('doppler')) { jvmArgs += "-Dnoise.doppler=${project.property('doppler')}" }
+    if(project.hasProperty('k')) { jvmArgs += "-Dnoise.k=${project.property('k')}" }
+    //-Preliability=false: voice soft decoding ignores the signal envelope reliabilities (A/B evaluation)
+    if(project.hasProperty('reliability')) { jvmArgs += "-Dp25.voice.reliability=${project.property('reliability')}" }
     args = [project.findProperty('clean'), project.findProperty('nac') ?: '0',
             layout.buildDirectory.dir('noise-control').get().asFile.path, project.findProperty('seeds') ?: '3'] +
             (project.findProperty('snr') ?: '15,12,10,8,7,6,5,4,3').toString().split(',').toList()

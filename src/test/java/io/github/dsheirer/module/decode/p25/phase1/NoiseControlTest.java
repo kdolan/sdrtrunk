@@ -62,6 +62,36 @@ public class NoiseControlTest
     }
 
     @Test
+    public void rayleighFadingKeepsAveragePowerWithDeepFades()
+    {
+        int n = 50000 * 20;
+        double[] ones = new double[n];
+        java.util.Arrays.fill(ones, 1.0);
+        NoiseInjector.Capture faded = NoiseInjector.fade(new NoiseInjector.Capture(ones, new double[n], 50000), 10, 0, 7);
+        double power = 0;
+        int deep = 0;
+
+        for(int x = 0; x < n; x++)
+        {
+            double p = faded.i()[x] * faded.i()[x] + faded.q()[x] * faded.q()[x];
+            power += p;
+            deep += p < 0.1 ? 1 : 0;
+        }
+
+        assertEquals(1.0, power / n, 0.15, "unit mean power");
+        //Rayleigh: P(|g|^2 < 0.1) = 1 - exp(-0.1) = 9.5%
+        assertEquals(0.095, (double)deep / n, 0.04, "share of samples more than 10 dB down");
+
+        NoiseInjector.Capture rician = NoiseInjector.fade(new NoiseInjector.Capture(ones, new double[n], 50000), 10, 10, 7);
+        int ricianDeep = 0;
+        for(int x = 0; x < n; x++)
+        {
+            ricianDeep += rician.i()[x] * rician.i()[x] + rician.q()[x] * rician.q()[x] < 0.1 ? 1 : 0;
+        }
+        assertTrue(ricianDeep < deep / 10, "a strong line of sight (K 10) rarely fades 10 dB");
+    }
+
+    @Test
     public void diversityRecoversWeakSignalFramesWithoutLosingAny() throws Exception
     {
         assumeTrue(CLEAN.exists(), "corpus clip not present: " + CLEAN);

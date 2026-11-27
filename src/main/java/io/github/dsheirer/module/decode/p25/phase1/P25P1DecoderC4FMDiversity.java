@@ -405,7 +405,8 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
         if(ldu.getSoftSymbols() != null)
         {
             SoftIMBEFrameDecoder.Result soft = SoftIMBEFrameDecoder.decode(raw,
-                SoftIMBEFrameDecoder.getBitConfidence(ldu.getSoftSymbols(), FRAME_OFFSETS[frame]), CHASE_BITS);
+                SoftIMBEFrameDecoder.getBitConfidence(ldu.getSoftSymbols(), ldu.getReliabilities(),
+                    FRAME_OFFSETS[frame]), CHASE_BITS);
             CorrectedIMBEFrame softFrame = CorrectedIMBEFrame.correct(soft.frame());
             //The soft frame re-corrects to zero errors by construction, so rank it behind the hard frames it came from
             candidates.add(new Candidate(soft.frame(), golayContent(softFrame.getFrame()),

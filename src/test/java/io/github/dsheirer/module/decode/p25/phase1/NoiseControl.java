@@ -105,6 +105,9 @@ public class NoiseControl
         int nac = Integer.parseInt(args[1]);
         File work = new File(args[2]);
         int seeds = Integer.parseInt(args[3]);
+        //Optional flat fading ahead of the noise: -Dnoise.doppler=Hz (0 = none) -Dnoise.k=Rician K (0 = Rayleigh)
+        double doppler = Double.parseDouble(System.getProperty("noise.doppler", "0"));
+        double kFactor = Double.parseDouble(System.getProperty("noise.k", "0"));
         work.mkdirs();
 
         NoiseInjector.Capture capture = NoiseInjector.load(clean);
@@ -113,6 +116,8 @@ public class NoiseControl
         System.out.printf("CLEAN %s | in-band SNR %.1f dB (call %.1f-%.1f s, quiet %.1f-%.1f s) | truth %d error-free " +
             "LDUs (%d frames)%n", clean.getName(), measurement.snrDb(), measurement.callStart(), measurement.callEnd(),
             measurement.quietStart(), measurement.quietEnd(), truth.size(), truth.size() * 9);
+        System.out.println(doppler > 0 ? String.format("FADING Rician K %.1f, max Doppler %.1f Hz (average SNR)", kFactor,
+            doppler) : "NO FADING (white noise only)");
         System.out.println("SNR dB | LDUs found | frames right: standard  diversity | gained lost");
 
         for(int a = 4; a < args.length; a++)
@@ -123,7 +128,8 @@ public class NoiseControl
             for(int seed = 1; seed <= seeds; seed++)
             {
                 File degraded = new File(work, String.format("snr%04.1f_seed%d_baseband.wav", snr, seed));
-                NoiseInjector.write(NoiseInjector.degrade(capture, measurement, snr, seed), degraded);
+                NoiseInjector.Capture faded = doppler > 0 ? NoiseInjector.fade(capture, doppler, kFactor, seed) : capture;
+                NoiseInjector.write(NoiseInjector.degrade(faded, measurement, snr, seed), degraded);
                 total = total.plus(score(truth, degraded, nac));
                 degraded.delete();
             }

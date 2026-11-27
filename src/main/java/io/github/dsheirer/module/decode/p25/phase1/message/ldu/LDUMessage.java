@@ -48,6 +48,7 @@ public abstract class LDUMessage extends P25P1Message
     private List<CorrectedIMBEFrame> mCorrectedIMBEFrames;
     private int mReceivedBitCount = -1;
     private float[] mSoftSymbols;
+    private float[] mReliabilities;
 
     /**
      * Sets the demodulated soft symbols (radians, one per dibit, status symbols removed) that the message bits were
@@ -64,6 +65,24 @@ public abstract class LDUMessage extends P25P1Message
     public float[] getSoftSymbols()
     {
         return mSoftSymbols;
+    }
+
+    /**
+     * Sets the soft decision weight of each dibit of the message (from the received signal envelope: low during a
+     * fade), parallel to the soft symbols.
+     * @param reliabilities per dibit, or null
+     */
+    public void setReliabilities(float[] reliabilities)
+    {
+        mReliabilities = reliabilities;
+    }
+
+    /**
+     * Soft decision weight of each dibit of the message, or null when not available
+     */
+    public float[] getReliabilities()
+    {
+        return mReliabilities;
     }
 
     /**
