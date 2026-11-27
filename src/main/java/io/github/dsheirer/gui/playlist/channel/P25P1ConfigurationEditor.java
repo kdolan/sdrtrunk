@@ -300,7 +300,8 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             Label weakSignalLabel = new Label("Weak-Signal Diversity (C4FM):");
             weakSignalLabel.setTooltip(new Tooltip("Also decode voice on secondary tracks with narrower channel " +
                 "filters and pick the best version of each\nvoice frame the normal decode got wrong.  Recovers voice " +
-                "from weak transmissions; the normal decode is unchanged.\nUses extra CPU for this channel."));
+                "from weak transmissions; the normal decode is unchanged.\nOn by default.  Turn it off to save CPU " +
+                "(about 0.14 of a CPU core per channel)."));
             GridPane.setHalignment(weakSignalLabel, HPos.RIGHT);
             GridPane.setConstraints(weakSignalLabel, 0, 10);
             gridPane.getChildren().add(weakSignalLabel);
@@ -916,7 +917,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         config.setTrafficChannelPoolSize(getTrafficChannelPoolSizeSpinner().getValue());
         config.setConfiguredNAC(getNACSpinner().getValue());
         config.setPipelineDiagnostics(getPipelineDiagnosticsSwitch().isSelected());
-        config.setWeakSignalDiversity(getWeakSignalDiversitySwitch().isSelected());
+        config.setWeakSignalDiversityDisabled(!getWeakSignalDiversitySwitch().isSelected());
 
         // LSM v2 options
         config.setIgnoreEncryptionState(getIgnoreEncryptionSwitch().isSelected());

@@ -966,8 +966,8 @@ tasks.register('runRegression', JavaExec) {
     if(project.hasProperty('jmbe')) {
         argsList.addAll(['--jmbe', project.property('jmbe')])
     }
-    if(project.hasProperty('diversity')) {
-        jvmArgs += '-Dp25.c4fm.diversity=true'
+    if(project.hasProperty('standard')) {
+        jvmArgs += '-Dp25.c4fm.diversity=false'
     }
     if(project.hasProperty('update')) {
         argsList.add('--update')

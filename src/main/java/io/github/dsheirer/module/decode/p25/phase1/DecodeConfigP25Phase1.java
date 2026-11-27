@@ -76,7 +76,7 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     private int mConfiguredNAC = 0; // 0 = auto-detect, 1-4095 = configured NAC
     private int mAudioHoldoverMs = DEFAULT_AUDIO_HOLDOVER_MS;
     private boolean mIgnoreEncryptionState = false;
-    private boolean mWeakSignalDiversity = false;
+    private boolean mWeakSignalDiversityDisabled = false;
     private int mMaxImbeErrors = 0; // 0 = disabled, 1-10 = quality gate threshold
     private int mMaxBchErrors = MAX_BCH_ERRORS_DEFAULT;
     private float mCmaAcquisitionMu = 0.003f; // Fast convergence for initial lock after cold-start
@@ -254,17 +254,30 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
 
     /**
      * Indicates if C4FM voice is also decoded on secondary tracks with narrower channel filters, to recover voice
-     * frames of weak transmissions (see P25P1DecoderC4FMDiversity).  The primary decode is unchanged.
+     * frames of weak transmissions (see P25P1DecoderC4FMDiversity).  The primary decode is unchanged.  On by default;
+     * it can be turned off per channel to save CPU (about 0.14 of a core per channel).
+     *
+     * The older opt-in attribute "weakSignalDiversity" is ignored when a playlist is loaded: every channel saved while
+     * diversity was opt-in carries weakSignalDiversity="false", which would otherwise keep it off everywhere.
      */
-    @JacksonXmlProperty(isAttribute = true, localName = "weakSignalDiversity")
+    @JsonIgnore
     public boolean isWeakSignalDiversity()
     {
-        return mWeakSignalDiversity;
+        return !mWeakSignalDiversityDisabled;
     }
 
-    public void setWeakSignalDiversity(boolean enabled)
+    /**
+     * Indicates if the user turned weak-signal diversity off for this channel
+     */
+    @JacksonXmlProperty(isAttribute = true, localName = "weakSignalDiversityDisabled")
+    public boolean isWeakSignalDiversityDisabled()
     {
-        mWeakSignalDiversity = enabled;
+        return mWeakSignalDiversityDisabled;
+    }
+
+    public void setWeakSignalDiversityDisabled(boolean disabled)
+    {
+        mWeakSignalDiversityDisabled = disabled;
     }
 
     @JacksonXmlProperty(isAttribute = true, localName = "pipelineDiagnostics")

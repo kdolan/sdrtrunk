@@ -13,9 +13,10 @@ committed baseline, exiting non-zero if anything got worse.
 Without `-Pjmbe` the decode metrics still run, but every audio metric reads zero — the JMBE codec is
 what turns IMBE frames into audio. Supply it whenever the audio gates matter.
 
-`-Pdiversity` runs the P25 C4FM channels through the weak-signal diversity decoder
-(`P25P1DecoderC4FMDiversity`) instead of the standard one, against the same baseline. It must not fall below it either:
-the primary decode is unchanged, so only the audio metrics may move, and only up. `DiversityCorpusTest` checks that
+P25 C4FM channels run through the weak-signal diversity decoder (`P25P1DecoderC4FMDiversity`), as live channels do by
+default since 2026-11-27. `-Pstandard` runs the standard decoder alone for comparison: the diversity decoder's
+primary decode is the standard one, so only the audio metrics differ, and on weak clips the standard run is expected to
+fall below the baseline (that gap is what diversity recovers). `DiversityCorpusTest` checks that
 messages and every error-free voice frame are identical between the two decoders, and `runDiversityProbe` scores both
 against a clean capture when given a noise-degraded copy of it.
 
@@ -39,7 +40,9 @@ gated metrics carry **zero tolerance**:
 | `audio_seconds` | must not decrease by more than 1% |
 | MDC CRC-valid bursts (per file) | must not decrease |
 
-The baseline was last reset on 2026-11-25, when the audio module started suppressing LDUs that carry no recoverable
+On 2026-11-27 the gate switched to the weak-signal diversity decoder for C4FM (the new live default). Messages and LDUs were identical on every file; `audio_seconds` rose on four: `p25-c4fm-a_03` +0.36 s, `p25-c4fm-l_03` +1.44 s, and the `p25-c4fm-g` weak-unit clips `_01` 0 -> 0.36 s and `_03` 0 -> 1.44 s. Those are LDUs that diversity's frame voting brought to at least 3 error-free frames (zero Golay corrections, which random bits essentially never produce), so they are recovered speech, not the clicks the g clips were added to keep out; `UnrecoverableVoiceCorpusTest` still checks the standard decoder's classification of those clips. Only those four rows were re-baselined.
+
+Before that, the baseline was last reset on 2026-11-25, when the audio module started suppressing LDUs that carry no recoverable
 voice (`P25P1AudioModule.isUnrecoverable`): LDUs whose corrected IMBE frames total 72+ errors with fewer than 3 clean
 frames, and LDUs that the framer truncated (dispatched with zero padding because the next frame's sync arrived early).
 `ldu_count` and `valid_messages` did not change. `audio_seconds` fell on 11 files (most on the simulcast clips), because

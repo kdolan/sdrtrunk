@@ -325,8 +325,9 @@ public class DecodeQualityTest
             }
             default ->
             {
-                //-Dp25.c4fm.diversity=true (runRegression -Pdiversity) evaluates the weak-signal diversity decoder
-                P25P1DecoderC4FM d = Boolean.getBoolean("p25.c4fm.diversity") ? new P25P1DecoderC4FMDiversity() :
+                //C4FM uses the weak-signal diversity decoder, as live channels do by default;
+                //-Dp25.c4fm.diversity=false (runRegression -Pstandard) evaluates the standard decoder alone
+                P25P1DecoderC4FM d = !"false".equals(System.getProperty("p25.c4fm.diversity")) ? new P25P1DecoderC4FMDiversity() :
                     new P25P1DecoderC4FM();
                 if(nac > 0) d.setConfiguredNAC(nac);
                 yield new DecoderWrapper()
