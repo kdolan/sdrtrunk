@@ -31,6 +31,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -49,12 +50,19 @@ import org.slf4j.LoggerFactory;
  * empty.  The output folder itself is never removed.  A folder is skipped when it is, or contains, the application
  * root, configuration, playlist or JMBE folder, so a recordings folder pointed at the wrong place can't remove the
  * user's settings.  Files that are open (being written) can't be deleted on Windows and are retried next pass.
+ *
+ * Disk guard: when the recordings drive has less than {@link #MIN_FREE_BYTES} free, the oldest recordings are deleted
+ * (whatever their age, never one modified in the last {@link #ACTIVE_WINDOW}) until {@link #TARGET_FREE_BYTES} is
+ * free, so a node recording many channels can't fill its disk before the retention period is reached.
  */
 public class StorageRetention
 {
     private static final Logger mLog = LoggerFactory.getLogger(StorageRetention.class);
     private static final long INITIAL_DELAY_MINUTES = 2;
     private static final long INTERVAL_MINUTES = 60;
+    static final long MIN_FREE_BYTES = 10L * 1024 * 1024 * 1024;
+    static final long TARGET_FREE_BYTES = 15L * 1024 * 1024 * 1024;
+    static final Duration ACTIVE_WINDOW = Duration.ofMinutes(10);
 
     private final Settings mSettings;
     private final AtomicBoolean mRunning = new AtomicBoolean();
@@ -122,6 +130,22 @@ public class StorageRetention
                         ")" + (result.failedFiles() > 0 ? ", " + result.failedFiles() + " in use or not deletable" : ""));
                 }
             }
+
+            Path recordings = directories.getDirectoryRecording();
+
+            if(Files.isDirectory(recordings))
+            {
+                long free = Files.getFileStore(recordings).getUsableSpace();
+
+                if(free < MIN_FREE_BYTES)
+                {
+                    Result result = purgeOldest(recordings, TARGET_FREE_BYTES - free,
+                        Instant.now().minus(ACTIVE_WINDOW), protectedPaths);
+                    mLog.warn("Storage guard: " + FileUtils.byteCountToDisplaySize(free) + " free on the recordings " +
+                        "drive - deleted the oldest " + result.deletedFiles() + " recordings (" +
+                        FileUtils.byteCountToDisplaySize(result.deletedBytes()) + ")");
+                }
+            }
         }
         catch(Throwable t)
         {
@@ -171,6 +195,98 @@ public class StorageRetention
         long[] bytes = new long[1];
         purgeFolder(root, root, cutoff, counts, bytes);
         return new Result(counts[0], bytes[0], counts[1], false);
+    }
+
+    /**
+     * Deletes the least recently modified regular files under the folder until at least the requested number of bytes
+     * has been deleted.  Folders are left in place for the age-based purge.
+     * @param folder to delete from
+     * @param bytesToFree target
+     * @param notAfter files modified after this instant (being written) are never deleted
+     * @param protectedPaths as for {@link #purge}
+     * @return result
+     */
+    public static Result purgeOldest(Path folder, long bytesToFree, Instant notAfter, Set<Path> protectedPaths)
+    {
+        if(folder == null || bytesToFree <= 0 || !Files.isDirectory(folder, LinkOption.NOFOLLOW_LINKS))
+        {
+            return new Result(0, 0, 0, false);
+        }
+
+        Path root = normalize(folder);
+
+        for(Path p: protectedPaths)
+        {
+            if(p != null && normalize(p).startsWith(root))
+            {
+                mLog.warn("Storage guard skipped [" + folder + "] because it contains [" + p + "]");
+                return new Result(0, 0, 0, true);
+            }
+        }
+
+        List<Candidate> candidates = new ArrayList<>();
+        collect(root, notAfter, candidates);
+        candidates.sort(Comparator.comparing(Candidate::modified));
+        int deleted = 0, failed = 0;
+        long bytes = 0;
+
+        for(Candidate candidate: candidates)
+        {
+            if(bytes >= bytesToFree)
+            {
+                break;
+            }
+
+            try
+            {
+                Files.delete(candidate.path());
+                deleted++;
+                bytes += candidate.size();
+            }
+            catch(IOException e)
+            {
+                failed++;
+            }
+        }
+
+        return new Result(deleted, bytes, failed, false);
+    }
+
+    private record Candidate(Path path, Instant modified, long size) {}
+
+    /**
+     * Collects regular files under the folder modified before the instant.  Symbolic links are not followed.
+     */
+    private static void collect(Path folder, Instant notAfter, List<Candidate> candidates)
+    {
+        try(DirectoryStream<Path> stream = Files.newDirectoryStream(folder))
+        {
+            for(Path entry: stream)
+            {
+                try
+                {
+                    BasicFileAttributes attributes = Files.readAttributes(entry, BasicFileAttributes.class,
+                        LinkOption.NOFOLLOW_LINKS);
+
+                    if(attributes.isDirectory())
+                    {
+                        collect(entry, notAfter, candidates);
+                    }
+                    else if(attributes.isRegularFile() && attributes.lastModifiedTime().toInstant().isBefore(notAfter))
+                    {
+                        candidates.add(new Candidate(entry, attributes.lastModifiedTime().toInstant(), attributes.size()));
+                    }
+                }
+                catch(IOException e)
+                {
+                    //Gone or unreadable: leave it
+                }
+            }
+        }
+        catch(IOException e)
+        {
+            //Unreadable folder: leave it
+        }
     }
 
     /**

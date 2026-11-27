@@ -134,6 +134,41 @@ public class StorageRetentionTest
     }
 
     @Test
+    public void guardDeletesOldestRecordingsFirstAndNeverActiveOnes() throws IOException
+    {
+        Path recordings = mTemp.resolve("recordings");
+        Path oldest = file(recordings.resolve("Rock-W_9"), "a_baseband.wav", 5, 100);
+        Path second = file(recordings, "b_call.mp3", 4, 100);
+        Path third = file(recordings.resolve("Raymond-PD_42"), "c_baseband.wav", 3, 100);
+        Path newest = file(recordings, "d_call.mp3", 2, 100);
+        Path active = file(recordings.resolve("Raymond-PD_42"), "e_baseband.wav", 0, 100);
+        Instant notAfter = NOW.minus(Duration.ofMinutes(10));
+
+        StorageRetention.Result result = StorageRetention.purgeOldest(recordings, 150, notAfter, Set.of());
+        assertEquals(2, result.deletedFiles(), "deletes in age order until the target is reached");
+        assertFalse(Files.exists(oldest));
+        assertFalse(Files.exists(second));
+        assertTrue(Files.exists(third));
+        assertTrue(Files.exists(newest));
+
+        result = StorageRetention.purgeOldest(recordings, 10_000, notAfter, Set.of());
+        assertEquals(2, result.deletedFiles());
+        assertTrue(Files.exists(active), "a recording being written is never deleted");
+        assertTrue(Files.isDirectory(recordings.resolve("Raymond-PD_42")));
+    }
+
+    @Test
+    public void guardSkipsAFolderHoldingProtectedFolders() throws IOException
+    {
+        Path root = mTemp.resolve("SDRTrunk");
+        Path playlist = file(root.resolve("playlist"), "default.xml", 60, 100);
+        StorageRetention.Result result = StorageRetention.purgeOldest(root, 10_000, NOW,
+            Set.of(root.resolve("playlist")));
+        assertTrue(result.skipped());
+        assertTrue(Files.exists(playlist));
+    }
+
+    @Test
     public void missingFolderIsIgnored()
     {
         StorageRetention.Result result = StorageRetention.purge(mTemp.resolve("nope"), CUTOFF, Set.of());
