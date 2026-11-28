@@ -73,21 +73,33 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
      * Secondary track definition: the demodulator (the standard C4FM decoder with a channel filter of the given pass
      * and stop band edges, or the C4FM_V2 decoder with its own filters) and a frequency shift.
      */
-    public record TrackConfig(boolean v2, double passBand, double stopBand, double shiftHz)
+    public record TrackConfig(boolean v2, double passBand, double stopBand, double shiftHz, int equalizerTaps,
+                              float equalizerMu)
     {
         static TrackConfig c4fm(double passBand, double stopBand, double shiftHz)
         {
-            return new TrackConfig(false, passBand, stopBand, shiftHz);
+            return new TrackConfig(false, passBand, stopBand, shiftHz, 0, 0);
         }
 
         static TrackConfig v2(double shiftHz)
         {
-            return new TrackConfig(true, 0, 0, shiftHz);
+            return new TrackConfig(true, 0, 0, shiftHz, 0, 0);
+        }
+
+        /**
+         * Standard C4FM decoder with a multipath (constant modulus) equalizer ahead of its FM discriminator
+         */
+        static TrackConfig equalized(double passBand, double stopBand, int taps, float mu)
+        {
+            return new TrackConfig(false, passBand, stopBand, 0, taps, mu);
         }
     }
 
     /**
-     * Twelve secondary tracks.  Tracks that differ only in channel filter make correlated mistakes; adding narrower
+     * Fourteen secondary tracks.  The last two put a constant modulus equalizer ahead of the FM discriminator, which
+     * recovers frames from multi-transmitter (simulcast) channels that no filter or offset track does: on 50 Plaistow PD
+     * calls they raised the frames some track had error-free from 70.9% to 73.0% (strong calls) and 36.9% to 41.7%
+     * (weak calls).  The first twelve:  Tracks that differ only in channel filter make correlated mistakes; adding narrower
      * filters, wider frequency offsets and a different demodulator (C4FM_V2) made the candidates more independent.  On
      * the testbed at 4 dB this took the frames where some track was right from 77-83% to 89-93%, and the frames
      * decoded correctly from 55-57% to 72-77%.
@@ -104,7 +116,9 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
         TrackConfig.c4fm(3500, 4500, -300),
         TrackConfig.v2(0),
         TrackConfig.v2(150),
-        TrackConfig.v2(-150));
+        TrackConfig.v2(-150),
+        TrackConfig.equalized(5200, 6500, 9, 0.002f),
+        TrackConfig.equalized(5200, 6500, 15, 0.005f));
 
     private record Decoded(long position, LDUMessage ldu) {}
     private record Held(long releaseAt, long position, IMessage message) {}
@@ -137,6 +151,11 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
             else
             {
                 P25P1DecoderC4FM decoder = new P25P1DecoderC4FM(config.passBand(), config.stopBand());
+                if(config.equalizerTaps() > 0)
+                {
+                    decoder.setEqualizer(new io.github.dsheirer.dsp.filter.equalizer.FMConstantModulusEqualizer(
+                        config.equalizerTaps(), config.equalizerMu(), 1e-5f));
+                }
                 mDecoder = decoder;
                 mFramer = decoder.getMessageFramer();
                 mReceive = decoder::receive;

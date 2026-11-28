@@ -108,6 +108,9 @@ public class NoiseControl
         //Optional flat fading ahead of the noise: -Dnoise.doppler=Hz (0 = none) -Dnoise.k=Rician K (0 = Rayleigh)
         double doppler = Double.parseDouble(System.getProperty("noise.doppler", "0"));
         double kFactor = Double.parseDouble(System.getProperty("noise.k", "0"));
+        //Optional simulcast second transmitter: -Dnoise.simulcast=delayMicroseconds,relativeDb,dfHz
+        String[] simulcast = System.getProperty("noise.simulcast", "").isBlank() ? null :
+            System.getProperty("noise.simulcast").split(",");
         work.mkdirs();
 
         NoiseInjector.Capture capture = NoiseInjector.load(clean);
@@ -116,6 +119,11 @@ public class NoiseControl
         System.out.printf("CLEAN %s | in-band SNR %.1f dB (call %.1f-%.1f s, quiet %.1f-%.1f s) | truth %d error-free " +
             "LDUs (%d frames)%n", clean.getName(), measurement.snrDb(), measurement.callStart(), measurement.callEnd(),
             measurement.quietStart(), measurement.quietEnd(), truth.size(), truth.size() * 9);
+        if(simulcast != null)
+        {
+            System.out.printf("SIMULCAST second transmitter %s us later, %s dB weaker, %s Hz apart%n", simulcast[0],
+                simulcast[1], simulcast[2]);
+        }
         System.out.println(doppler > 0 ? String.format("FADING Rician K %.1f, max Doppler %.1f Hz (average SNR)", kFactor,
             doppler) : "NO FADING (white noise only)");
         System.out.println("SNR dB | LDUs found | frames right: standard  diversity | gained lost");
@@ -128,7 +136,10 @@ public class NoiseControl
             for(int seed = 1; seed <= seeds; seed++)
             {
                 File degraded = new File(work, String.format("snr%04.1f_seed%d_baseband.wav", snr, seed));
-                NoiseInjector.Capture faded = doppler > 0 ? NoiseInjector.fade(capture, doppler, kFactor, seed) : capture;
+                NoiseInjector.Capture received = simulcast == null ? capture : NoiseInjector.simulcast(capture,
+                    Double.parseDouble(simulcast[0]) * 1e-6, Double.parseDouble(simulcast[1]),
+                    Double.parseDouble(simulcast[2]), seed);
+                NoiseInjector.Capture faded = doppler > 0 ? NoiseInjector.fade(received, doppler, kFactor, seed) : received;
                 NoiseInjector.write(NoiseInjector.degrade(faded, measurement, snr, seed), degraded);
                 total = total.plus(score(truth, degraded, nac));
                 degraded.delete();

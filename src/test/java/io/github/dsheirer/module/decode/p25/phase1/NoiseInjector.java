@@ -289,6 +289,56 @@ public class NoiseInjector
     }
 
     /**
+     * Copy of the capture as received from two simulcast transmitters: the capture plus a second copy delayed by
+     * delaySeconds, relativeDb weaker (0 dB = equal), offset in frequency by dfHz (their carriers differ slightly, so the
+     * two drift in and out of phase) and scaled so the total average power is unchanged.  The delay is applied in the
+     * frequency domain, so fractions of a sample are exact.
+     */
+    public static Capture simulcast(Capture capture, double delaySeconds, double relativeDb, double dfHz, long seed)
+    {
+        int n = capture.length();
+        int size = Integer.highestOneBit(Math.max(1, n - 1)) << 1;
+        double[] buffer = new double[2 * size];
+
+        for(int x = 0; x < n; x++)
+        {
+            buffer[2 * x] = capture.i()[x];
+            buffer[2 * x + 1] = capture.q()[x];
+        }
+
+        DoubleFFT_1D fft = new DoubleFFT_1D(size);
+        fft.complexForward(buffer);
+
+        for(int k = 0; k < size; k++)
+        {
+            double f = (k < size / 2 ? k : k - size) * capture.sampleRate() / size;
+            double angle = -2 * Math.PI * f * delaySeconds;
+            double c = Math.cos(angle), s = Math.sin(angle);
+            double re = buffer[2 * k], im = buffer[2 * k + 1];
+            buffer[2 * k] = re * c - im * s;
+            buffer[2 * k + 1] = re * s + im * c;
+        }
+
+        fft.complexInverse(buffer, true);
+        double amplitude = Math.pow(10, -Math.abs(relativeDb) / 20);
+        double phase0 = 2 * Math.PI * new Random(seed).nextDouble();
+        double increment = 2 * Math.PI * dfHz / capture.sampleRate();
+        double norm = 1 / Math.sqrt(1 + amplitude * amplitude);
+        double[] i = new double[n];
+        double[] q = new double[n];
+
+        for(int x = 0; x < n; x++)
+        {
+            double c = amplitude * Math.cos(phase0 + increment * x), s = amplitude * Math.sin(phase0 + increment * x);
+            double di = buffer[2 * x], dq = buffer[2 * x + 1];
+            i[x] = norm * (capture.i()[x] + di * c - dq * s);
+            q[x] = norm * (capture.q()[x] + di * s + dq * c);
+        }
+
+        return new Capture(i, q, capture.sampleRate());
+    }
+
+    /**
      * Copy of the capture with white Gaussian noise added to bring the in-band SNR down to the target.  The result is
      * scaled down if needed so it doesn't clip.
      */

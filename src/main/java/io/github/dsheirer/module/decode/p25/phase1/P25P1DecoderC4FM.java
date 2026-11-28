@@ -90,6 +90,7 @@ public class P25P1DecoderC4FM extends FeedbackDecoder implements IByteBufferProv
     private IRealDecimationFilter mDecimationFilterQ;
     private IRealFilter mBasebandFilterI;
     private IRealFilter mBasebandFilterQ;
+    private io.github.dsheirer.dsp.filter.equalizer.FMConstantModulusEqualizer mEqualizer;
     private IRealFilter mReceiveFilter;
     private FMDiscriminatorReliability mReliability;
 
@@ -200,6 +201,15 @@ public class P25P1DecoderC4FM extends FeedbackDecoder implements IByteBufferProv
     }
 
     /**
+     * Sets a multipath (simulcast) equalizer applied to the channel filtered samples ahead of the FM discriminator, or
+     * null for none (default).
+     */
+    public void setEqualizer(io.github.dsheirer.dsp.filter.equalizer.FMConstantModulusEqualizer equalizer)
+    {
+        mEqualizer = equalizer;
+    }
+
+    /**
      * Converts the soft symbol reliabilities to soft decision decoding weights.  Noise injection testing against a P25
      * C4FM control channel recording found that the square root of the reliability produced 1.6% more valid messages
      * at 9 dB carrier to noise (in-band) than the reliability, and 6.3% more than unweighted decoding.  The P25 LSM
@@ -234,6 +244,11 @@ public class P25P1DecoderC4FM extends FeedbackDecoder implements IByteBufferProv
 
         i = mBasebandFilterI.filter(i);
         q = mBasebandFilterQ.filter(q);
+
+        if(mEqualizer != null)
+        {
+            mEqualizer.equalize(i, q);
+        }
 
         float[] demodulated = mDemodulator.demodulate(i, q);
         demodulated = mReceiveFilter.filter(demodulated);

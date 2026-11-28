@@ -92,6 +92,27 @@ public class NoiseControlTest
     }
 
     @Test
+    public void diversityRecoversSimulcastFrames() throws Exception
+    {
+        assumeTrue(CLEAN.exists(), "corpus clip not present: " + CLEAN);
+        NoiseInjector.Capture clean = NoiseInjector.load(CLEAN);
+        NoiseInjector.Measurement measurement = NoiseInjector.measure(clean);
+        //A second transmitter 80 us later, 1 dB weaker, 15 Hz apart, at a strong 30 dB
+        NoiseInjector.Capture received = NoiseInjector.simulcast(clean, 80e-6, 1, 15, 1);
+        File noisy = mTemp.resolve("simulcast_baseband.wav").toFile();
+        NoiseInjector.write(NoiseInjector.degrade(received, measurement, 30, 1), noisy);
+
+        NoiseControl.Score score = NoiseControl.score(NoiseControl.truth(CLEAN, NAC), noisy, NAC);
+        double standard = 100.0 * score.standard() / score.frames();
+        double diversity = 100.0 * score.diversity() / score.frames();
+
+        //3 seeds: standard 39.4%, diversity 64.7% (14 tracks including the two equalized tracks)
+        assertTrue(standard < 70, "the simulcast model damages a strong signal: " + standard);
+        assertTrue(diversity >= standard + 12, String.format("diversity %.1f%% vs standard %.1f%%", diversity, standard));
+        assertTrue(score.lost() <= 3, "frames lost: " + score.lost());
+    }
+
+    @Test
     public void diversityRecoversWeakSignalFramesWithoutLosingAny() throws Exception
     {
         assumeTrue(CLEAN.exists(), "corpus clip not present: " + CLEAN);
