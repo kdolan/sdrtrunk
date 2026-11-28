@@ -1091,6 +1091,8 @@ tasks.register('runNoiseControl', JavaExec) {
     //-Pdoppler=Hz [-Pk=Rician K] adds flat fading ahead of the noise (K 0 = Rayleigh)
     if(project.hasProperty('doppler')) { jvmArgs += "-Dnoise.doppler=${project.property('doppler')}" }
     if(project.hasProperty('k')) { jvmArgs += "-Dnoise.k=${project.property('k')}" }
+    //-Pgating=false: diversity secondary tracks run all the time (A/B evaluation)
+    if(project.hasProperty('gating')) { jvmArgs += "-Dp25.diversity.gating=${project.property('gating')}" }
     //-Preliability=false: voice soft decoding ignores the signal envelope reliabilities (A/B evaluation)
     if(project.hasProperty('reliability')) { jvmArgs += "-Dp25.voice.reliability=${project.property('reliability')}" }
     args = [project.findProperty('clean'), project.findProperty('nac') ?: '0',

@@ -47,11 +47,22 @@ import jmbe.frame.CorrectedIMBEFrame;
  * and its soft decision frame, see SoftIMBEFrameDecoder) are grouped by the frame's Golay-protected content and the
  * best-scoring group replaces the primary's frame (see vote()): it must have needed fewer corrections than the
  * primary, and ties keep the primary.  Error-free primary frames are never touched, so strong signals are unaffected.
+ *
+ * Activity gating: the secondary tracks only run while the primary is decoding.  Every LDU that diversity can improve
+ * is one the primary produced, so the tracks are woken by the primary's first message and sleep again once the primary
+ * has been quiet for {@link #HANGOVER_SECONDS}.  While asleep, the most recent {@link #PRE_ROLL_SECONDS} of samples are
+ * kept, and on waking the tracks decode that pre-roll first (it covers the LDU that woke them, its frame sync and the
+ * lead-in before it), then continue live.  The catch-up runs before the primary's held LDU is released, so the vote
+ * sees the same secondary decodes as when the tracks never sleep; idle channels cost only the primary decoder.
+ * -Dp25.diversity.gating=false keeps the tracks running all the time (evaluation).
  */
 public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
 {
     private static final double HOLD_SECONDS = 0.15;
     private static final double MATCH_SECONDS = 0.10;
+    static final double PRE_ROLL_SECONDS = Double.parseDouble(System.getProperty("p25.diversity.preroll", "0.6"));
+    static final double HANGOVER_SECONDS = Double.parseDouble(System.getProperty("p25.diversity.hangover", "1.0"));
+    private static final boolean GATING_DEFAULT = !"false".equals(System.getProperty("p25.diversity.gating"));
     private static final int GOLAY_PROTECTED_BITS = 92;
     private static final int CHASE_BITS = 5;
     private static final int[] FRAME_OFFSETS = {LDUMessage.IMBE_FRAME_1, LDUMessage.IMBE_FRAME_2,
@@ -136,7 +147,7 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
             mDecoder.setMessageListener(message -> {
                 if(message instanceof LDUMessage ldu && !ldu.isDuidCorrected() && !ldu.isTruncated())
                 {
-                    mDecoded.add(new Decoded(mSamplePosition, ldu));
+                    mDecoded.add(new Decoded(mTrackPosition, ldu));
                 }
             });
         }
@@ -201,6 +212,17 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
     private long mMatchSamples = (long)(MATCH_SECONDS * 50000);
     private long mFramesReplaced = 0;
     private long mFramesAssessed = 0;
+    //Sample position of the buffer the secondary tracks are processing (live, or a pre-roll buffer on waking)
+    private long mTrackPosition = 0;
+    private boolean mGating = GATING_DEFAULT;
+    private boolean mTracksActive = !GATING_DEFAULT;
+    private boolean mWakeRequested = false;
+    private long mLastPrimaryMessagePosition = Long.MIN_VALUE;
+    private long mActiveSamples = 0;
+    private long mTotalSamples = 0;
+    private record PreRoll(long position, ComplexSamples samples) {}
+    private final Deque<PreRoll> mPreRoll = new ArrayDeque<>();
+    private long mPreRollSamples = 0;
 
     public P25P1DecoderC4FMDiversity()
     {
@@ -294,12 +316,45 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
     public void receive(ComplexSamples samples)
     {
         super.receive(samples);
+        mTotalSamples += samples.length();
 
-        for(Track track: mTracks)
+        if(mTracksActive)
         {
-            track.receive(samples);
+            feedTracks(mSamplePosition, samples);
+
+            if(mGating && mSamplePosition - mLastPrimaryMessagePosition > (long)(HANGOVER_SECONDS * mSampleRate))
+            {
+                mTracksActive = false;
+            }
+        }
+        else
+        {
+            //Upstream may reuse sample arrays, so the pre-roll keeps copies
+            mPreRoll.addLast(new PreRoll(mSamplePosition, new ComplexSamples(samples.i().clone(), samples.q().clone(),
+                samples.timestamp())));
+            mPreRollSamples += samples.length();
+
+            while(mPreRollSamples - mPreRoll.peekFirst().samples().length() >= (long)(PRE_ROLL_SECONDS * mSampleRate))
+            {
+                mPreRollSamples -= mPreRoll.pollFirst().samples().length();
+            }
+
+            if(mWakeRequested)
+            {
+                //Catch up on the pre-roll (which includes this buffer), then run live
+                mTracksActive = true;
+
+                while(!mPreRoll.isEmpty())
+                {
+                    PreRoll preRoll = mPreRoll.pollFirst();
+                    feedTracks(preRoll.position(), preRoll.samples());
+                }
+
+                mPreRollSamples = 0;
+            }
         }
 
+        mWakeRequested = false;
         mSamplePosition += samples.length();
         release(mSamplePosition);
 
@@ -308,6 +363,35 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
         {
             track.prune(prune);
         }
+    }
+
+    /**
+     * Turns activity gating of the secondary tracks on (default) or off; call before the first samples.
+     */
+    void setGating(boolean gating)
+    {
+        mGating = gating;
+        mTracksActive = !gating;
+    }
+
+    private void feedTracks(long position, ComplexSamples samples)
+    {
+        mTrackPosition = position;
+        mActiveSamples += samples.length();
+
+        for(Track track: mTracks)
+        {
+            track.receive(samples);
+        }
+    }
+
+    /**
+     * Fraction of the received samples that the secondary tracks processed (1.0 when not gated).  The pre-roll
+     * decoded on waking counts as processed.
+     */
+    public double getActiveFraction()
+    {
+        return mTotalSamples == 0 ? 0 : Math.min(1.0, (double)mActiveSamples / mTotalSamples);
     }
 
     /**
@@ -524,6 +608,13 @@ public class P25P1DecoderC4FMDiversity extends P25P1DecoderC4FM
         @Override
         public void receive(IMessage message)
         {
+            //Any decoded P25 data unit wakes the secondary tracks (sync loss and dropped sample notices don't)
+            if(message instanceof io.github.dsheirer.module.decode.p25.phase1.message.P25P1Message)
+            {
+                mWakeRequested = true;
+                mLastPrimaryMessagePosition = mSamplePosition;
+            }
+
             //Hold every message behind a held LDU so order is kept; anything else with nothing held goes straight on
             boolean hold = message instanceof LDUMessage || !mHeld.isEmpty();
 
